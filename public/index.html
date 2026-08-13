@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>会议排班台 · MeetingBoard</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- 登录遮罩 -->
+<div id="loginOverlay" class="overlay hidden">
+  <div class="login-card">
+    <div class="login-brand">
+      <svg class="logo-mark" viewBox="0 0 48 48" aria-hidden="true"><rect x="6" y="8" width="36" height="32" rx="6" fill="none" stroke="currentColor" stroke-width="3.2"/><path d="M6 18h36" stroke="currentColor" stroke-width="3.2"/><path d="M16 4v8M32 4v8" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/><circle cx="16" cy="25" r="2.6" fill="currentColor"/><circle cx="24" cy="25" r="2.6" fill="currentColor"/><circle cx="32" cy="25" r="2.6" fill="currentColor"/></svg>
+      <div>
+        <h1 data-i18n="appName">会议排班台</h1>
+        <p class="login-sub" data-i18n="appSub">Meeting Schedule</p>
+      </div>
+    </div>
+    <h2 class="login-title" data-i18n="login_title">账号密码登录</h2>
+    <p class="login-hint" data-i18n="login_sub">用户名是企业微信名字</p>
+    <form id="loginForm">
+      <div class="form-row">
+        <input id="loginUsername" class="input" autocomplete="username" placeholder="" data-i18n-ph="username" required>
+      </div>
+      <div class="form-row">
+        <input id="loginPassword" type="password" class="input" autocomplete="current-password" placeholder="" data-i18n-ph="password" required>
+      </div>
+      <div id="loginError" class="login-error hidden"></div>
+      <button type="submit" class="btn btn-primary btn-block" data-i18n="loginBtn">登录</button>
+    </form>
+    <div id="loginDivider" class="login-divider hidden"><span data-i18n="orChoose">或使用企业微信登录</span></div>
+    <button id="wecomLoginBtn" class="btn btn-wecom hidden">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3c-4.4 0-8 2.9-8 6.5 0 2 .9 3.7 2.4 4.9l-.7 2.5 2.7-1.4c.6.2 1.1.3 1.7.4M12 21c4.4 0 8-2.9 8-6.5 0-2-.9-3.7-2.4-4.9l.7-2.5-2.7 1.4c-.6-.2-1.1-.3-1.7-.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span data-i18n="wecomLogin">企业微信登录</span>
+    </button>
+    <div class="seg lang-seg login-lang-seg" id="loginLangSeg">
+      <button type="button" class="seg-item" data-setlang="zh">中文</button>
+      <button type="button" class="seg-item" data-setlang="en">English</button>
+    </div>
+  </div>
+</div>
+
+<!-- 主布局 -->
+<div id="app" class="app hidden">
+
+  <!-- 侧边栏 -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <svg class="logo-mark" viewBox="0 0 48 48" aria-hidden="true"><rect x="6" y="8" width="36" height="32" rx="6" fill="none" stroke="currentColor" stroke-width="3.2"/><path d="M6 18h36" stroke="currentColor" stroke-width="3.2"/><path d="M16 4v8M32 4v8" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/><circle cx="16" cy="25" r="2.6" fill="currentColor"/><circle cx="24" cy="25" r="2.6" fill="currentColor"/><circle cx="32" cy="25" r="2.6" fill="currentColor"/></svg>
+      <div class="brand-text">
+        <span class="brand-name" data-i18n="appName">会议排班台</span>
+        <span class="brand-sub">MeetingBoard</span>
+      </div>
+    </div>
+    <nav class="nav" id="nav">
+      <button class="nav-item active" data-tab="calendar">
+        <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 10h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span data-i18n="nav_calendar">排班日历</span>
+      </button>
+      <button class="nav-item" data-tab="list">
+        <svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="4" cy="6" r="1.4" fill="currentColor"/><circle cx="4" cy="12" r="1.4" fill="currentColor"/><circle cx="4" cy="18" r="1.4" fill="currentColor"/></svg>
+        <span data-i18n="nav_list">会议列表</span>
+      </button>
+      <button class="nav-item" data-tab="stats">
+        <svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span data-i18n="nav_stats">数据指标</span>
+      </button>
+      <button class="nav-item hidden" id="navMembers" data-tab="members">
+        <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="17" cy="9" r="2.4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M16.5 14.6c2.2.3 3.6 1.7 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span data-i18n="nav_members">成员管理</span>
+      </button>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="conn" id="connBadge"><span class="dot"></span><span data-i18n="connected">已连接</span></div>
+      <button id="backupBtn" class="btn-link backup-link" data-i18n="backup">数据备份</button>
+      <div class="me" id="meBox">
+        <span class="me-name" id="meName">-</span>
+        <div class="me-actions">
+          <button id="profileBtn" class="btn-link" data-i18n="profile">个人资料</button>
+          <button id="logoutBtn" class="btn-link" data-i18n="logout">退出</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 主内容 -->
+  <main class="main">
+    <!-- 顶部 -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <h2 id="pageTitle">排班日历</h2>
+        <div id="monthNav" class="month-nav hidden">
+          <button id="prevMonthBtn" class="icon-btn" aria-label="prev">‹</button>
+          <span id="monthLabel" class="month-label">2026年8月</span>
+          <button id="nextMonthBtn" class="icon-btn" aria-label="next">›</button>
+          <button id="todayBtn" class="btn btn-ghost btn-sm" data-i18n="today">今天</button>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <button id="menuBtn" class="icon-btn menu-btn" aria-label="menu">
+          <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+        <span id="tzBadge" class="tz-badge" title=""></span>
+        <div class="seg lang-seg" id="topLangSeg">
+          <button type="button" class="seg-item" data-setlang="zh">中文</button>
+          <button type="button" class="seg-item" data-setlang="en">English</button>
+        </div>
+        <button id="bellBtn" class="icon-btn bell" aria-label="reminders">
+          <svg viewBox="0 0 24 24"><path d="M6 9.5a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M10.5 19a1.8 1.8 0 0 0 3 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <span id="bellCount" class="badge hidden">0</span>
+        </button>
+        <button id="addMeetingBtn" class="btn btn-primary">
+          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+          <span data-i18n="addMeeting">添加会议</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- 日历页 -->
+    <section id="tab-calendar" class="tab active">
+      <div class="calendar-wrap card">
+        <div id="weekdays" class="weekdays"></div>
+        <div id="calendarGrid" class="calendar-grid"></div>
+      </div>
+    </section>
+
+    <!-- 列表页 -->
+    <section id="tab-list" class="tab">
+      <div class="card">
+        <div class="filter-bar" id="filterBar">
+          <select id="fCountry" class="select"></select>
+          <select id="fType" class="select"></select>
+          <select id="fEmployee" class="select"></select>
+          <input id="fFrom" type="date" class="input" aria-label="from">
+          <span class="filter-sep">—</span>
+          <input id="fTo" type="date" class="input" aria-label="to">
+          <select id="fStatus" class="select"></select>
+          <input id="fSearch" type="search" class="input grow" placeholder="" data-i18n-ph="searchPlaceholder">
+          <button id="fReset" class="btn btn-ghost btn-sm" data-i18n="reset">重置</button>
+          <button id="exportCsvBtn" class="btn btn-ghost btn-sm" data-i18n="exportCsv">导出 CSV</button>
+        </div>
+        <div class="table-wrap">
+          <table class="table" id="meetingTable">
+            <thead><tr>
+              <th data-i18n="date">日期</th><th data-i18n="meetingTitle">会议标题</th>
+              <th data-i18n="meetingType">会议类型</th><th data-i18n="country">国家/市场</th>
+              <th data-i18n="employees">参会员工</th><th data-i18n="channel">会议渠道</th><th></th>
+            </tr></thead>
+            <tbody id="meetingTbody"></tbody>
+          </table>
+          <div id="listEmpty" class="empty hidden"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 数据指标页 -->
+    <section id="tab-stats" class="tab">
+      <div class="card">
+        <div class="stats-toolbar">
+          <div class="seg" id="statsScope">
+            <button class="seg-item active" data-scope="all" data-i18n="statRangeAll">全部时间</button>
+            <button class="seg-item" data-scope="month" data-i18n="statRangeMonth">本月</button>
+            <button class="seg-item" data-scope="3m" data-i18n="statRange3m">近3月</button>
+            <button class="seg-item" data-scope="year" data-i18n="statRangeYear">今年</button>
+          </div>
+          <div class="seg" id="statsView">
+            <button class="seg-item active" data-view="team" data-i18n="statsTeam">团队汇总</button>
+            <button class="seg-item" data-view="mine" data-i18n="statsMine">我的会议</button>
+          </div>
+          <button id="exportStatsBtn" class="btn btn-ghost btn-sm" data-i18n="exportCsv">导出 CSV</button>
+        </div>
+        <p class="stats-hint" data-i18n="statsHint"></p>
+
+        <div id="statsTeamView">
+          <div id="statCards" class="stat-cards"></div>
+          <div class="stats-grid">
+            <div class="stat-panel">
+              <h3 data-i18n="statByCountry">按市场统计</h3>
+              <div id="countryBars" class="bars"></div>
+            </div>
+            <div class="stat-panel">
+              <h3 data-i18n="statByType">按类型统计</h3>
+              <div id="typeBars" class="bars"></div>
+            </div>
+            <div class="stat-panel wide">
+              <h3 data-i18n="statTrend">近12周趋势</h3>
+              <div id="trendChart" class="trend"></div>
+            </div>
+            <div class="stat-panel wide">
+              <h3 data-i18n="statByEmployee">按员工统计</h3>
+              <div id="employeeBars" class="bars"></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="statsMineView" class="hidden">
+          <div id="mineSummary" class="mine-summary"></div>
+          <div class="stats-grid">
+            <div class="stat-panel">
+              <h3 data-i18n="statByCountry">按市场统计</h3>
+              <div id="mineCountryBars" class="bars"></div>
+            </div>
+            <div class="stat-panel">
+              <h3 data-i18n="statByType">按类型统计</h3>
+              <div id="mineTypeBars" class="bars"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 成员管理页 -->
+    <section id="tab-members" class="tab">
+      <div class="card">
+        <div class="filter-bar">
+          <h3 data-i18n="members">成员</h3>
+          <div class="grow"></div>
+          <button id="addMemberBtn" class="btn btn-primary btn-sm" data-i18n="addMember">添加成员</button>
+        </div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr>
+              <th data-i18n="name">姓名</th><th data-i18n="englishName">英文名</th>
+              <th data-i18n="role">角色</th><th data-i18n="meetingCount">场次</th>
+              <th data-i18n="wecom">企业微信</th><th data-i18n="email">邮箱</th>
+              <th data-i18n="active">启用</th><th></th>
+            </tr></thead>
+            <tbody id="memberTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- 会议编辑弹窗 -->
+<div id="meetingModal" class="overlay hidden">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="meetingModalTitle">新建会议</h3>
+      <button class="icon-btn" data-close="meetingModal">✕</button>
+    </div>
+    <form id="meetingForm">
+      <input type="hidden" id="mId">
+      <div class="form-row">
+        <label class="field grow">
+          <span data-i18n="meetingTitle">会议标题</span>
+          <input id="mTitle" class="input" required maxlength="120" placeholder="如：南亚市场周例会 / South Asia Weekly Meeting">
+        </label>
+      </div>
+      <div class="form-row">
+        <label class="field">
+          <span data-i18n="country">国家/市场</span>
+          <input id="mCountry" class="input" list="countryList" placeholder="南亚 / 巴基斯坦...">
+        </label>
+        <label class="field">
+          <span data-i18n="meetingType">会议类型</span>
+          <input id="mType" class="input" list="typeList" placeholder="周例会 / Introductory Meeting...">
+        </label>
+        <label class="field">
+          <span data-i18n="channel">会议渠道</span>
+          <input id="mChannel" class="input" maxlength="60" placeholder="Zoom / WeChat / 电话">
+        </label>
+      </div>
+      <div class="form-row">
+        <label class="field">
+          <span data-i18n="date">日期</span>
+          <input id="mDate" type="date" class="input" required>
+        </label>
+        <label class="field">
+          <span data-i18n="startTime">开始时间</span>
+          <input id="mStart" type="time" class="input" required>
+        </label>
+        <label class="field">
+          <span data-i18n="endTime">结束时间</span>
+          <input id="mEnd" type="time" class="input" required>
+        </label>
+        <label class="field checkbox-field">
+          <input id="mRepeat" type="checkbox">
+          <span data-i18n="repeatWeekly">每周重复</span>
+        </label>
+      </div>
+      <p id="mTzHint" class="tz-hint"></p>
+      <div class="form-row">
+        <label class="field grow">
+          <span data-i18n="employees">参会员工</span>
+          <div id="mEmployees" class="chip-group"></div>
+        </label>
+      </div>
+      <div class="form-row">
+        <label class="field grow">
+          <span data-i18n="note">备注</span>
+          <textarea id="mNote" class="input" rows="2" maxlength="300"></textarea>
+        </label>
+      </div>
+      <div id="conflictBox" class="conflict hidden"></div>
+      <div class="modal-foot">
+        <button type="button" id="mDelete" class="btn btn-danger hidden" data-i18n="delete">删除</button>
+        <div class="grow"></div>
+        <button type="button" class="btn btn-ghost" data-close="meetingModal" data-i18n="cancel">取消</button>
+        <button type="submit" class="btn btn-primary" data-i18n="save">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 成员编辑弹窗 -->
+<div id="memberModal" class="overlay hidden">
+  <div class="modal modal-sm">
+    <div class="modal-head">
+      <h3 id="memberModalTitle">添加成员</h3>
+      <button class="icon-btn" data-close="memberModal">✕</button>
+    </div>
+    <form id="memberForm">
+      <input type="hidden" id="muId">
+      <div class="form-row">
+        <label class="field">
+          <span data-i18n="memberName">姓名</span>
+          <input id="muName" class="input" required maxlength="40">
+        </label>
+        <label class="field">
+          <span data-i18n="memberNameEn">英文名（可选）</span>
+          <input id="muNameEn" class="input" maxlength="60">
+        </label>
+      </div>
+      <div class="form-row">
+        <label class="field">
+          <span data-i18n="wecomUserId">企业微信ID（可选）</span>
+          <input id="muWecom" class="input" maxlength="64" placeholder="如：ZhangWei">
+        </label>
+        <label class="field">
+          <span data-i18n="emailOpt">邮箱（可选）</span>
+          <input id="muEmail" type="email" class="input" maxlength="120" placeholder="name@company.com">
+        </label>
+      </div>
+      <div class="form-row">
+        <label class="field">
+          <span data-i18n="role">角色</span>
+          <select id="muRole" class="select">
+            <option value="member" data-i18n="roleMember">普通成员</option>
+            <option value="admin" data-i18n="roleAdmin">管理员</option>
+          </select>
+        </label>
+        <label class="field checkbox-field" style="align-self:flex-end">
+          <input id="muActive" type="checkbox" checked>
+          <span data-i18n="active">启用</span>
+        </label>
+      </div>
+      <div class="form-row">
+        <label class="field grow">
+          <span data-i18n="offDays">不可用日期</span>
+          <div id="muOffChips" class="chip-group"></div>
+          <div class="off-add-row">
+            <input id="muOffDate" type="date" class="input">
+            <button type="button" id="muOffAdd" class="btn btn-ghost btn-sm" data-i18n="offAdd">添加</button>
+          </div>
+          <span class="field-hint" data-i18n="offDaysHint"></span>
+        </label>
+      </div>
+      <div class="modal-foot">
+        <div class="grow"></div>
+        <button type="button" class="btn btn-ghost" data-close="memberModal" data-i18n="cancel">取消</button>
+        <button type="submit" class="btn btn-primary" data-i18n="save">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 会议详情弹窗 -->
+<div id="detailModal" class="overlay hidden">
+  <div class="modal modal-sm">
+    <div class="modal-head">
+      <h3 data-i18n="meetingDetail">会议详情</h3>
+      <button class="icon-btn" data-close="detailModal">✕</button>
+    </div>
+    <div id="detailBody" class="detail-body"></div>
+    <div id="detailActions" class="detail-actions"></div>
+    <div id="detailRsvp" class="rsvp hidden"></div>
+    <div class="modal-foot">
+      <div class="grow"></div>
+      <button class="btn btn-ghost" data-close="detailModal" data-i18n="close">关闭</button>
+      <button id="detailEditBtn" class="btn btn-primary" data-i18n="edit">编辑</button>
+    </div>
+  </div>
+</div>
+
+<!-- 个人资料弹窗 -->
+<div id="profileModal" class="overlay hidden">
+  <div class="modal modal-sm">
+    <div class="modal-head">
+      <h3 data-i18n="profileTitle">个人资料</h3>
+      <button class="icon-btn" data-close="profileModal">✕</button>
+    </div>
+    <form id="profileForm">
+      <div class="form-row">
+        <label class="field">
+          <span data-i18n="memberNameEn">英文名（可选）</span>
+          <input id="pfNameEn" class="input" maxlength="60">
+        </label>
+        <label class="field">
+          <span data-i18n="emailOpt">邮箱（可选）</span>
+          <input id="pfEmail" type="email" class="input" maxlength="120" placeholder="name@company.com">
+        </label>
+      </div>
+      <p class="profile-hint" data-i18n="profileHint">邮箱用于接收会议提醒邮件；企业微信ID由管理员配置</p>
+    <div class="profile-pwd-row">
+      <button type="button" id="pwdBtn" class="btn btn-ghost btn-sm" data-i18n="changePwd">修改密码</button>
+    </div>
+    <div class="modal-foot">
+        <div class="grow"></div>
+        <button type="button" class="btn btn-ghost" data-close="profileModal" data-i18n="cancel">取消</button>
+        <button type="submit" class="btn btn-primary" data-i18n="save">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 修改密码弹窗 -->
+<div id="pwdModal" class="overlay hidden">
+  <div class="modal modal-sm">
+    <div class="modal-head">
+      <h3 data-i18n="changePwd">修改密码</h3>
+      <button class="icon-btn" data-close="pwdModal">✕</button>
+    </div>
+    <form id="pwdForm">
+      <div class="form-row">
+        <label class="field grow">
+          <span data-i18n="oldPwd">当前密码</span>
+          <input id="pwOld" type="password" class="input" autocomplete="current-password">
+        </label>
+      </div>
+      <div class="form-row">
+        <label class="field grow">
+          <span data-i18n="newPwd">新密码（至少 6 位）</span>
+          <input id="pwNew" type="password" class="input" autocomplete="new-password">
+        </label>
+      </div>
+      <div class="form-row">
+        <label class="field grow">
+          <span data-i18n="confirmPwd">确认新密码</span>
+          <input id="pwConfirm" type="password" class="input" autocomplete="new-password">
+        </label>
+      </div>
+      <div class="modal-foot">
+        <div class="grow"></div>
+        <button type="button" class="btn btn-ghost" data-close="pwdModal" data-i18n="cancel">取消</button>
+        <button type="submit" class="btn btn-primary" data-i18n="save">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 提醒面板 -->
+<div id="bellPanel" class="popover hidden">
+  <div class="popover-head">
+    <h4 data-i18n="bellTitle">提醒</h4>
+    <button class="icon-btn btn-sm" id="remindSettingsBtn" title="settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3M5.5 5.5l2.1 2.1M16.4 16.4l2.1 2.1M18.5 5.5l-2.1 2.1M7.6 16.4l-2.1 2.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+  <div id="bellList" class="popover-list"></div>
+</div>
+
+<!-- 提醒设置弹窗 -->
+<div id="settingsModal" class="overlay hidden">
+  <div class="modal modal-sm">
+    <div class="modal-head">
+      <h3 data-i18n="reminderSettings">提醒设置</h3>
+      <button class="icon-btn" data-close="settingsModal">✕</button>
+    </div>
+    <div class="form-row">
+      <label class="field">
+        <span data-i18n="remindBefore">提前提醒（分钟）</span>
+        <input id="setMinutes" type="number" class="input" min="0" max="120" step="5">
+      </label>
+      <label class="field checkbox-field" style="align-self:flex-end">
+        <input id="setSound" type="checkbox">
+        <span data-i18n="remindSound">声音提醒</span>
+      </label>
+    </div>
+    <div class="form-row">
+      <label class="field grow">
+        <span data-i18n="teamTimezone">团队时区</span>
+        <select id="setTZ" class="select"></select>
+        <span class="field-hint" data-i18n="timezoneHint"></span>
+      </label>
+    </div>
+    <div class="modal-foot">
+      <div class="grow"></div>
+      <button class="btn btn-ghost" data-close="settingsModal" data-i18n="cancel">取消</button>
+      <button id="setSaveBtn" class="btn btn-primary" data-i18n="save">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 备份操作 -->
+<div id="backupPanel" class="popover hidden">
+  <button id="backupExportBtn" class="popover-item" data-i18n="exportData">导出备份</button>
+  <button id="backupImportBtn" class="popover-item" data-i18n="importData">导入备份</button>
+</div>
+
+<!-- 通知 / 提示 -->
+<div id="toasts" class="toasts"></div>
+
+<datalist id="countryList"></datalist>
+<datalist id="typeList"></datalist>
+
+<script src="i18n.js"></script>
+<script src="dates.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
