@@ -2,7 +2,7 @@
 <html lang="zh">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>会议排班台 · MeetingBoard</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="styles.css">
@@ -43,6 +43,9 @@
   </div>
 </div>
 
+<!-- 移动端侧边栏遮罩 -->
+<div id="sidebarBackdrop" class="sidebar-backdrop hidden"></div>
+
 <!-- 主布局 -->
 <div id="app" class="app hidden">
 
@@ -75,6 +78,10 @@
     </nav>
     <div class="sidebar-foot">
       <div class="conn" id="connBadge"><span class="dot"></span><span data-i18n="connected">已连接</span></div>
+      <div class="seg lang-seg side-lang-seg" id="sideLangSeg">
+        <button type="button" class="seg-item" data-setlang="zh">中文</button>
+        <button type="button" class="seg-item" data-setlang="en">English</button>
+      </div>
       <button id="backupBtn" class="btn-link backup-link" data-i18n="backup">数据备份</button>
       <div class="me" id="meBox">
         <span class="me-name" id="meName">-</span>
@@ -91,6 +98,9 @@
     <!-- 顶部 -->
     <header class="topbar">
       <div class="topbar-left">
+        <button id="menuBtn" class="icon-btn menu-btn" aria-label="menu">
+          <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
         <h2 id="pageTitle">排班日历</h2>
         <div id="monthNav" class="month-nav hidden">
           <button id="prevMonthBtn" class="icon-btn" aria-label="prev">‹</button>
@@ -100,9 +110,6 @@
         </div>
       </div>
       <div class="topbar-right">
-        <button id="menuBtn" class="icon-btn menu-btn" aria-label="menu">
-          <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-        </button>
         <span id="tzBadge" class="tz-badge" title=""></span>
         <div class="seg lang-seg" id="topLangSeg">
           <button type="button" class="seg-item" data-setlang="zh">中文</button>
@@ -234,6 +241,26 @@
       </div>
     </section>
   </main>
+
+  <!-- 移动端底部导航 -->
+  <nav id="mobileNav" class="mobile-nav">
+    <button class="mnav-item active" data-tab="calendar">
+      <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 10h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span data-i18n="nav_calendar">排班日历</span>
+    </button>
+    <button class="mnav-item" data-tab="list">
+      <svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="4" cy="6" r="1.4" fill="currentColor"/><circle cx="4" cy="12" r="1.4" fill="currentColor"/><circle cx="4" cy="18" r="1.4" fill="currentColor"/></svg>
+      <span data-i18n="nav_list">会议列表</span>
+    </button>
+    <button class="mnav-item" data-tab="stats">
+      <svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span data-i18n="nav_stats">数据指标</span>
+    </button>
+    <button class="mnav-item" data-tab="members">
+      <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="17" cy="9" r="2.4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M16.5 14.6c2.2.3 3.6 1.7 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span data-i18n="nav_members">成员管理</span>
+    </button>
+  </nav>
 </div>
 
 <!-- 会议编辑弹窗 -->

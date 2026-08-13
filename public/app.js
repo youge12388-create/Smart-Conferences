@@ -338,6 +338,7 @@ function enterApp() {
   $('app').classList.remove('hidden');
   $('meName').textContent = myName(S.me);
   $('navMembers').classList.toggle('hidden', !isAdmin());
+  document.querySelectorAll('#mobileNav .mnav-item[data-tab="members"]').forEach((b) => b.classList.toggle('hidden', !isAdmin()));
   renderAll();
   if (Notification && Notification.requestPermission) {
     Notification.requestPermission().catch(() => {});
@@ -356,13 +357,14 @@ async function logout() {
 /* ---------------- 导航 ---------------- */
 function switchTab(tab) {
   S.tab = tab;
-  document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.nav-item, .mnav-item').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   document.querySelectorAll('.tab').forEach((s) => s.classList.toggle('active', s.id === 'tab-' + tab));
   $('pageTitle').textContent = t({
     calendar: 'nav_calendar', list: 'nav_list', stats: 'nav_stats', members: 'nav_members'
   }[tab]);
   $('monthNav').classList.toggle('hidden', tab !== 'calendar');
   $('addMeetingBtn').classList.toggle('hidden', tab === 'members');
+  $('pageTitle').classList.toggle('m-hide', window.innerWidth <= 860 && tab === 'calendar');
 }
 
 /* ---------------- 日历 ---------------- */
@@ -515,13 +517,13 @@ function renderList() {
     const tr = document.createElement('tr');
     if (st === 'cancelled') tr.className = 'row-cancelled';
     const tds = [
-      `<td class="nowrap">${fmtDate(m.date)}<div style="font-size:11px;color:var(--ink-3)">${fmtTimeRange(m)}${m.repeat === 'weekly' ? ' · ' + t('repeatBadge') : ''}</div></td>`,
-      `<td class="meeting-title"><b>${esc(m.title)}</b> <span class="tag tag-status st-${st}">${t('st_' + st)}</span>${m.note ? `<div style="font-size:11px;color:var(--ink-3)">${esc(m.note)}</div>` : ''}</td>`,
-      `<td><span class="tag tag-country" style="background:${countryColor(m.country)}">${esc(m.country || '-')}</span></td>`,
-      `<td><span class="tag tag-type">${esc(m.type || '-')}</span></td>`,
-      `<td>${m.employeeIds.map((id) => userOf(id)).filter(Boolean).map((u) => `<span class="mini-avatar" title="${esc(myName(u))}">${esc(initials(myName(u)))}</span>`).join('') || '-'}</td>`,
-      `<td>${esc(m.channel || '-')}</td>`,
-      `<td style="white-space:nowrap"><button class="btn-link" data-view="${m.id}" data-i18n-view="view">${t('view')}</button></td>`
+      `<td data-label="${t('date')}" class="nowrap">${fmtDate(m.date)}<div class="cell-sub">${fmtTimeRange(m)}${m.repeat === 'weekly' ? ' · ' + t('repeatBadge') : ''}</div></td>`,
+      `<td data-label="${t('meetingTitle')}" class="meeting-title"><b>${esc(m.title)}</b> <span class="tag tag-status st-${st}">${t('st_' + st)}</span>${m.note ? `<div class="cell-sub">${esc(m.note)}</div>` : ''}</td>`,
+      `<td data-label="${t('country')}"><span class="tag tag-country" style="background:${countryColor(m.country)}">${esc(m.country || '-')}</span></td>`,
+      `<td data-label="${t('meetingType')}"><span class="tag tag-type">${esc(m.type || '-')}</span></td>`,
+      `<td data-label="${t('employees')}">${m.employeeIds.map((id) => userOf(id)).filter(Boolean).map((u) => `<span class="mini-avatar" title="${esc(myName(u))}">${esc(initials(myName(u)))}</span>`).join('') || '-'}</td>`,
+      `<td data-label="${t('channel')}">${esc(m.channel || '-')}</td>`,
+      `<td class="row-ops" data-label=""><button class="btn-link" data-view="${m.id}" data-i18n-view="view">${t('view')}</button></td>`
     ].join('');
     tr.innerHTML = tds;
     tr.querySelector('[data-view]').onclick = () => openDetail(m.id);
@@ -702,18 +704,14 @@ function renderMembers() {
     const offCnt = (u.offDays || []).length;
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><b>${esc(u.name)}</b>${!u.active ? `<span style="color:var(--ink-3);font-size:11px"> (${t('inactive')})</span>` : ''}${offCnt ? `<span class="tag tag-status st-cancelled" style="margin-left:6px">${t('offDays')} ${offCnt}</span>` : ''}</td>
-      <td>${esc(u.nameEn || '-')}</td>
-      <td><span class="tag tag-type">${u.role === 'admin' ? t('roleAdmin') : t('roleMember')}</span></td>
-      <td>${cnt}</td>
-      <td>${u.wecomUserId ? `<span class="tag tag-country" style="background:#5B5EA6">${esc(u.wecomUserId)}</span>` : '<span style="color:var(--ink-3)">-</span>'}</td>
-      <td>${esc(u.email || '-')}</td>
-      <td><label class="switch"><input type="checkbox" data-uid="${u.id}" ${u.active ? 'checked' : ''}><span class="slider"></span></label></td>
-      <td style="white-space:nowrap">
-        <button class="btn-link" data-edit="${u.id}">${t('edit')}</button>
-        <button class="btn-link" data-resetpwd="${u.id}" style="color:var(--amber)">${t('resetPwd')}</button>
-        <button class="btn-link" data-del="${u.id}" style="color:var(--danger)">${t('delete')}</button>
-      </td>`;
+      <td data-label="${t('name')}"><b>${esc(u.name)}</b>${!u.active ? `<span class="cell-sub"> (${t('inactive')})</span>` : ''}${offCnt ? `<span class="tag tag-status st-cancelled" style="margin-left:6px">${t('offDays')} ${offCnt}</span>` : ''}</td>
+      <td data-label="${t('englishName')}">${esc(u.nameEn || '-')}</td>
+      <td data-label="${t('role')}"><span class="tag tag-type">${u.role === 'admin' ? t('roleAdmin') : t('roleMember')}</span></td>
+      <td data-label="${t('meetingCount')}">${cnt}</td>
+      <td data-label="${t('wecom')}">${u.wecomUserId ? `<span class="tag tag-country" style="background:#5B5EA6">${esc(u.wecomUserId)}</span>` : '<span style="color:var(--ink-3)">-</span>'}</td>
+      <td data-label="${t('email')}">${esc(u.email || '-')}</td>
+      <td data-label="${t('active')}"><label class="switch"><input type="checkbox" data-uid="${u.id}" ${u.active ? 'checked' : ''}><span class="slider"></span></label></td>
+      <td class="row-ops" data-label=""><button class="btn-link" data-edit="${u.id}">${t('edit')}</button> <button class="btn-link" data-resetpwd="${u.id}" style="color:var(--amber)">${t('resetPwd')}</button> <button class="btn-link" data-del="${u.id}" style="color:var(--danger)">${t('delete')}</button></td>`;
     tb.appendChild(tr);
     tr.querySelector('[data-edit]').onclick = () => openMemberModal(u.id);
     tr.querySelector('[data-resetpwd]').onclick = async () => {
@@ -1179,8 +1177,12 @@ function bindEvents() {
   };
 
   // 导航
-  document.querySelectorAll('.nav-item').forEach((b) => { b.onclick = () => { switchTab(b.dataset.tab); document.querySelector('.sidebar').classList.remove('open'); }; });
-  $('menuBtn').onclick = () => document.querySelector('.sidebar').classList.toggle('open');
+  const sb = () => document.querySelector('.sidebar');
+  const sbBackdrop = () => $('sidebarBackdrop');
+  const setSidebar = (open) => { sb().classList.toggle('open', open); sbBackdrop().classList.toggle('hidden', !open); };
+  document.querySelectorAll('.nav-item, .mnav-item').forEach((b) => { b.onclick = () => { switchTab(b.dataset.tab); setSidebar(false); }; });
+  $('menuBtn').onclick = () => setSidebar(!sb().classList.contains('open'));
+  $('sidebarBackdrop').onclick = () => setSidebar(false);
   $('addMeetingBtn').onclick = () => openMeetingModal(null);
   $('logoutBtn').onclick = logout;
   $('profileBtn').onclick = openProfileModal;
@@ -1329,6 +1331,7 @@ function bindEvents() {
     if (!ev.target.closest('#backupPanel') && !ev.target.closest('#backupBtn')) $('backupPanel').classList.add('hidden');
     if (window.innerWidth <= 860 && !ev.target.closest('.sidebar') && !ev.target.closest('#menuBtn')) {
       document.querySelector('.sidebar').classList.remove('open');
+      $('sidebarBackdrop').classList.add('hidden');
     }
   });
 }
