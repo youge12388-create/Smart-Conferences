@@ -1,0 +1,20 @@
+{
+  "_说明": "复制本文件为 config.json 并填入真实值。留空/不创建 config.json 时，企业微信与邮件功能自动关闭，工具以本地模式运行。",
+  "auth": {
+    "defaultPassword": "mb@123456"
+  },
+  "wecom": {
+    "corpId": "wwXXXXXXXXXXXXXXXX",
+    "agentId": "1000002",
+    "secret": "企业微信后台-应用详情页获取的应用Secret",
+    "publicBase": "https://mb.example.com"
+  },
+  "mail": {
+    "host": "smtp.example.com",
+    "port": 465,
+    "secure": true,
+    "user": "sender@example.com",
+    "pass": "smtp密码",
+    "from": "sender@example.com"
+  }
+}

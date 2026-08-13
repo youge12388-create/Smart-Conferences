@@ -1,0 +1,15 @@
+{
+  "name": "meetingboard",
+  "version": "1.0.0",
+  "description": "会议排班台 MeetingBoard - 多人会议排班、统计与提醒工具（零依赖）",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "private": true
+}

@@ -1,0 +1,8 @@
+# 运行数据与隐私（切勿提交）
+data/
+config.json
+
+# 运行时
+node_modules/
+runtime/
+*.log
