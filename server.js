@@ -19,6 +19,7 @@ const crypto = require('crypto');
 const dates = require('./lib/dates');
 const meeting = require('./lib/meeting');
 const auth = require('./lib/auth');
+const users = require('./lib/users');
 const wecom = require('./lib/wecom');
 const mail = require('./lib/mail');
 
@@ -566,11 +567,15 @@ async function handleApi(req, res, url) {
       const body = await readBody(req);
       const name = String(body.name || '').trim();
       if (!name) return send(res, 400, { error: 'name required' });
+      const wecomUserId = users.normalizeWecomUserId(body.wecomUserId);
+      if (users.isWecomUserIdTaken(store.users, wecomUserId)) {
+        return send(res, 400, { error: 'wecom user id already bound' });
+      }
       const user = {
         id: uid('u'),
         name,
         nameEn: String(body.nameEn || '').trim(),
-        wecomUserId: String(body.wecomUserId || '').trim(),
+        wecomUserId,
         email: String(body.email || '').trim(),
         role: body.role === 'admin' ? 'admin' : 'member',
         active: body.active === false ? false : true,
@@ -597,7 +602,13 @@ async function handleApi(req, res, url) {
       } else {
         if (typeof body.name === 'string' && body.name.trim()) u.name = body.name.trim();
         if (typeof body.nameEn === 'string') u.nameEn = body.nameEn.trim();
-        if (typeof body.wecomUserId === 'string') u.wecomUserId = body.wecomUserId.trim();
+        if (typeof body.wecomUserId === 'string') {
+          const wecomUserId = users.normalizeWecomUserId(body.wecomUserId);
+          if (users.isWecomUserIdTaken(store.users, wecomUserId, u.id)) {
+            return send(res, 400, { error: 'wecom user id already bound' });
+          }
+          u.wecomUserId = wecomUserId;
+        }
         if (typeof body.email === 'string') u.email = body.email.trim();
         if (body.role === 'admin' || body.role === 'member') u.role = body.role;
         if (typeof body.active === 'boolean') u.active = body.active;
@@ -783,8 +794,8 @@ async function handleApi(req, res, url) {
         html = cbPage('未获取到授权码，请重试', false);
       } else {
         try {
-          const wecomUserId = await wecom.getUserByCode(code);
-          const u = wecomUserId && store.users.find((x) => x.wecomUserId === wecomUserId && x.active);
+          const wecomUserId = users.normalizeWecomUserId(await wecom.getUserByCode(code));
+          const u = wecomUserId && store.users.find((x) => users.normalizeWecomUserId(x.wecomUserId) === wecomUserId && x.active);
           if (u) {
             const token = auth.createSession(u.id);
             const base = CONFIG.wecom.publicBase || '/';
@@ -809,12 +820,16 @@ async function handleApi(req, res, url) {
     if (!Array.isArray(body.users) || !Array.isArray(body.meetings)) {
       return send(res, 400, { error: 'invalid backup' });
     }
-    store = normalizeStore({
+    const imported = normalizeStore({
       users: body.users,
       meetings: body.meetings,
       dictionaries: body.dictionaries,
       meta: body.meta
     });
+    if (users.findDuplicateWecomUserId(imported.users)) {
+      return send(res, 400, { error: 'duplicate wecom user id in backup' });
+    }
+    store = imported;
     ensurePasswordHashes();
     notified.clear();
     scheduleSave();
