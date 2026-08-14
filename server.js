@@ -60,16 +60,19 @@ function loadConfig() {
 
 // OAuth state 防 CSRF（内存态，10 分钟有效）
 const oauthStates = new Map();
-function newOauthState() {
+function newOauthState(bindUserId = '') {
   const state = crypto.randomBytes(8).toString('hex');
-  oauthStates.set(state, Date.now() + 10 * 60 * 1000);
+  oauthStates.set(state, { expiresAt: Date.now() + 10 * 60 * 1000, bindUserId });
   return state;
 }
-function validOauthState(state) {
-  if (!state || !oauthStates.has(state)) return false;
-  if (oauthStates.get(state) < Date.now()) { oauthStates.delete(state); return false; }
+function consumeOauthState(state) {
+  const entry = state && oauthStates.get(state);
+  if (!entry || entry.expiresAt < Date.now()) {
+    oauthStates.delete(state);
+    return null;
+  }
   oauthStates.delete(state);
-  return true;
+  return entry;
 }
 
 // 管理员同步预览仅保存在内存中，10 分钟失效，避免浏览器提交任意 userid。
@@ -599,7 +602,15 @@ async function handleApi(req, res, url) {
     }
   }
 
-  // 企业微信通讯录同步：预览与写入均仅限管理员，Secret 不会返回浏览器。
+  // 仅在当前本地账号已登录的前提下发起企业微信 OAuth；回调才允许绑定该账号。
+  if (parts[1] === 'wecom' && parts.length === 3 && parts[2] === 'bind' && method === 'GET') {
+    const authRes = requireUser(req);
+    if (authRes.error) return send(res, 401, { error: authRes.error });
+    if (!wecom.isConfigured()) return send(res, 400, { error: 'wecom not configured' });
+    return send(res, 200, { url: wecom.buildAuthUrl(newOauthState(authRes.user.id)) });
+  }
+
+  // 旧版管理员通讯录同步接口保留为兼容入口；前端不再展示，避免依赖企业微信全量通讯录权限。
   if (parts[1] === 'wecom' && parts.length === 3 && (parts[2] === 'sync-preview' || parts[2] === 'sync-apply')) {
     const authRes = requireUser(req, 'admin');
     if (authRes.error) return send(res, authRes.error === 'permission denied' ? 403 : 401, { error: authRes.error });
@@ -886,22 +897,43 @@ async function handleApi(req, res, url) {
       const code = url.searchParams.get('code') || '';
       const state = url.searchParams.get('state') || '';
       let html;
-      if (!validOauthState(state)) {
+      const oauthState = consumeOauthState(state);
+      if (!oauthState) {
         html = cbPage('oauth state 无效，请重新登录（请在页面内重新打开应用）', false);
       } else if (!code) {
         html = cbPage('未获取到授权码，请重试', false);
       } else {
         try {
           const wecomUserId = users.normalizeWecomUserId(await wecom.getUserByCode(code));
-          const u = wecomUserId && store.users.find((x) => users.normalizeWecomUserId(x.wecomUserId) === wecomUserId && x.active);
+          let u;
+          if (oauthState.bindUserId) {
+            const binding = users.validateCurrentUserWecomBinding(store.users, oauthState.bindUserId, wecomUserId);
+            if (binding.error) {
+              html = cbPage('企业微信绑定失败：' + binding.error, false);
+              return sendText(res, 400, html, 'text/html; charset=utf-8');
+            }
+            u = binding.user;
+            if (binding.status === 'ready') {
+              try {
+                createBackup('wecom-oauth-bind');
+              } catch (e) {
+                html = cbPage('企业微信绑定失败：无法创建数据备份', false);
+                return sendText(res, 500, html, 'text/html; charset=utf-8');
+              }
+              u.wecomUserId = binding.wecomUserId;
+              await flushSave();
+              broadcast('changed', {});
+            }
+          } else {
+            u = wecomUserId && store.users.find((x) => users.normalizeWecomUserId(x.wecomUserId) === wecomUserId && x.active);
+          }
           if (u) {
             const token = auth.createSession(u.id);
             const base = CONFIG.wecom.publicBase || '/';
             html = cbPage('', true, `location.href='${base}';`);
             return sendText(res, 200, html, 'text/html; charset=utf-8', { 'Set-Cookie': sessionCookie(token) });
-          } else {
-            html = cbPage('该企业微信账号未绑定成员或已停用，请联系管理员', false);
           }
+          html = cbPage('该企业微信账号未绑定成员或已停用，请联系管理员', false);
         } catch (e) {
           html = cbPage('企业微信验证失败：' + (e && e.message ? e.message : '未知错误') + '（请检查应用 Secret 与服务器IP白名单）', false);
         }
