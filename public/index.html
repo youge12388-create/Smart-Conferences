@@ -227,8 +227,9 @@
           <div class="grow"></div>
           <button id="addMemberBtn" class="btn btn-primary btn-sm" data-i18n="addMember">添加成员</button>
         </div>
+        <p id="wecomMemberStatus" class="wecom-member-status" role="status"></p>
         <div class="table-wrap">
-          <table class="table">
+          <table id="memberTable" class="table">
             <thead><tr>
               <th data-i18n="name">姓名</th><th data-i18n="englishName">英文名</th>
               <th data-i18n="role">角色</th><th data-i18n="meetingCount">场次</th>
@@ -357,6 +358,7 @@
         <label class="field">
           <span data-i18n="wecomUserId">企业微信ID（可选）</span>
           <input id="muWecom" class="input" maxlength="64" placeholder="如：ZhangWei">
+          <span class="field-hint" data-i18n="wecomUserIdHint"></span>
         </label>
         <label class="field">
           <span data-i18n="emailOpt">邮箱（可选）</span>
