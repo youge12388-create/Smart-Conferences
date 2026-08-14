@@ -9,6 +9,11 @@
     "secret": "企业微信后台-应用详情页获取的应用Secret",
     "publicBase": "https://mb.example.com"
   },
+  "alerts": {
+    "_说明": "机器人地址只填入服务器的 config.json，绝不提交真实 key。",
+    "wecomRobotWebhook": "",
+    "healthCheckUrl": "http://127.0.0.1:8080/healthz"
+  },
   "mail": {
     "host": "smtp.example.com",
     "port": 465,
