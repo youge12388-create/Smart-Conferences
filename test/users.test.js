@@ -27,3 +27,18 @@ test('findDuplicateWecomUserId returns the duplicate non-blank ID', () => {
   ]), 'LiNa');
   assert.equal(users.findDuplicateWecomUserId([{ wecomUserId: '' }, { wecomUserId: 'ZhangWei' }]), '');
 });
+
+
+test('validateCurrentUserWecomBinding only allows a blank active local account to claim a unique id', () => {
+  const members = [
+    { id: 'u1', active: true, wecomUserId: '' },
+    { id: 'u2', active: true, wecomUserId: 'LiNa' },
+    { id: 'u3', active: false, wecomUserId: '' }
+  ];
+  const ready = users.validateCurrentUserWecomBinding(members, 'u1', ' ZhangWei ');
+  assert.equal(ready.status, 'ready');
+  assert.equal(ready.wecomUserId, 'ZhangWei');
+  assert.equal(users.validateCurrentUserWecomBinding(members, 'u1', 'LiNa').error, 'wecom user id already bound');
+  assert.equal(users.validateCurrentUserWecomBinding(members, 'u2', 'ZhangWei').error, 'local account already bound to another wecom user id');
+  assert.equal(users.validateCurrentUserWecomBinding(members, 'u3', 'ZhangWei').error, 'local account unavailable');
+});
