@@ -340,7 +340,7 @@ function enterApp() {
   $('navMembers').classList.toggle('hidden', !isAdmin());
   document.querySelectorAll('#mobileNav .mnav-item[data-tab="members"]').forEach((b) => b.classList.toggle('hidden', !isAdmin()));
   renderAll();
-  if (Notification && Notification.requestPermission) {
+  if (typeof Notification !== 'undefined' && Notification.requestPermission) {
     Notification.requestPermission().catch(() => {});
   }
 }
