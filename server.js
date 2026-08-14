@@ -24,6 +24,8 @@ const wecomSync = require('./lib/wecom-sync');
 const wecom = require('./lib/wecom');
 const mail = require('./lib/mail');
 const audit = require('./lib/audit');
+const reminderState = require('./lib/reminder-state');
+const runtimeAlerts = require('./lib/runtime-alerts');
 
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, 'data');
@@ -38,6 +40,7 @@ const DEFAULT_PASSWORD = 'mb@123456';
 let CONFIG = {
   wecom: { corpId: '', agentId: '', secret: '', publicBase: '' },
   mail: { host: '', port: 465, secure: true, user: '', pass: '', from: '' },
+  alerts: { wecomRobotWebhook: '' },
   auth: { defaultPassword: DEFAULT_PASSWORD }
 };
 
@@ -57,6 +60,13 @@ function loadConfig() {
   }
   wecom.setConfig(CONFIG.wecom || null);
   mail.setConfig(CONFIG.mail || null);
+  runtimeAlerts.setConfig(CONFIG.alerts || null);
+}
+
+const sendRuntimeAlert = runtimeAlerts.createReporter();
+function reportRuntimeError(scope, error) {
+  console.error(`[runtime] ${scope}: ${runtimeAlerts.errorSummary(error)}`);
+  return sendRuntimeAlert(scope, error);
 }
 
 // OAuth state 防 CSRF（内存态，10 分钟有效）
@@ -255,23 +265,30 @@ function broadcast(event, payload) {
 
 /* ------------------------------ 提醒调度 ------------------------------ */
 
-// 已提醒集合：key = meetingId|YYYY-MM-DD
-const notified = new Set();
+// 已提醒集合：key = meetingId|YYYY-MM-DD。48 小时后自动释放，避免长期运行累积。
+const notified = reminderState.createDeliveryTracker();
 
-function pushToTargets(targets, content) {
+function escapeCardText(value) {
+  return String(value || '').replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
+}
+
+function meetingTargetUrl(m) {
+  return m.meetingUrl || (CONFIG.wecom && CONFIG.wecom.publicBase) || '';
+}
+
+function pushToTargets(targets, content, card) {
   if (wecom.isConfigured()) {
     const wecomIds = targets.map((u) => u.wecomUserId).filter(Boolean);
     if (wecomIds.length) {
-      wecom.sendTextMessage(wecomIds, content).catch((e) => {
-        console.log('[wecom] 消息发送失败:', e && e.message ? e.message : e);
-      });
+      const sendMessage = card ? wecom.sendTextCardMessage(wecomIds, card) : wecom.sendTextMessage(wecomIds, content);
+      sendMessage.catch((e) => { reportRuntimeError('wecom.message', e); });
     }
   }
   if (mail.isConfigured()) {
     const emails = targets.map((u) => u.email).filter(Boolean);
     if (emails.length) {
       mail.sendMail(emails, `【会议提醒】${content.split('\n')[0]}`, content).catch((e) => {
-        console.log('[mail] 邮件发送失败:', e && e.message ? e.message : e);
+        reportRuntimeError('mail.reminder', e);
       });
     }
   }
@@ -280,40 +297,47 @@ function pushToTargets(targets, content) {
 function checkReminders() {
   const minutes = store.meta.reminderMinutes || 10;
   const now = new Date();
+  notified.prune(now.getTime());
   for (const m of store.meetings) {
-    if (m.status === 'cancelled') continue; // 已取消的会议不再提醒
+    if (m.status === 'cancelled') continue;
     const occ = dates.nextOccurrence(m, now);
     if (!occ) continue;
     const diffMin = (occ.getTime() - now.getTime()) / 60000;
-    // 会前提醒（提前 N 分钟，一次）
     if (diffMin >= 0 && diffMin <= minutes) {
       const key = `${m.id}|${dates.toDateStr(occ)}`;
-      if (!notified.has(key)) {
-        notified.add(key);
+      if (!notified.has(key, now.getTime())) {
+        notified.mark(key, now.getTime());
         broadcast('reminder', {
           meeting: m,
           occurrence: dates.toDateStr(occ),
           minutesBefore: Math.round(diffMin),
           reminderMinutes: minutes
         });
+        const minutesLeft = Math.max(1, Math.round(diffMin));
         const content =
-          `【会议提醒 / Meeting Reminder】\n` +
+          `【会前准备提醒 / Meeting Preparation】\n` +
           `${m.title}\n` +
+          `会议将在 ${minutesLeft} 分钟后开始 / Starts in ${minutesLeft} min\n` +
           `时间 Time: ${dates.toDateStr(occ)} ${m.start}-${m.end}\n` +
           (m.country ? `市场 Market: ${m.country}\n` : '') +
           (m.channel ? `渠道 Channel: ${m.channel}\n` : '') +
-          (m.note ? `备注 Note: ${m.note}\n` : '');
+          `请提前准备会议资料并安排好时间 / Please prepare your materials and schedule.`;
+        const card = {
+          title: `会议将在 ${minutesLeft} 分钟后开始`,
+          description: `<div class="gray">会前准备温馨提醒 / Meeting Preparation</div><div class="normal">${escapeCardText(m.title)}<br>${escapeCardText(dates.toDateStr(occ))} ${escapeCardText(m.start)}-${escapeCardText(m.end)}</div><div class="highlight">请提前准备会议资料并安排好时间</div>`,
+          url: meetingTargetUrl(m),
+          buttonText: '进入会议'
+        };
         const targets = (m.employeeIds || []).map((id) => store.users.find((u) => u.id === id)).filter(Boolean);
-        pushToTargets(targets, content);
+        pushToTargets(targets, content, card);
       }
     }
-    // 到点二次提醒：未确认参加的人（一次）
     if (diffMin <= 0 && diffMin > -10) {
       const askKey = `${m.id}|${dates.toDateStr(occ)}|ask`;
-      if (!notified.has(askKey)) {
+      if (!notified.has(askKey, now.getTime())) {
         const unconfirmed = (m.employeeIds || []).filter((id) => !m.confirmations || m.confirmations[id] !== 'yes');
         if (unconfirmed.length) {
-          notified.add(askKey);
+          notified.mark(askKey, now.getTime());
           const content =
             `【会议开始 / Meeting Starting】\n` +
             `${m.title}\n` +
@@ -1083,6 +1107,9 @@ function getLANIPs() {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const p = url.pathname;
+  if (p === '/healthz' && req.method === 'GET') {
+    return send(res, 200, { ok: true, uptimeSeconds: Math.floor(process.uptime()) });
+  }
   try {
     if (p.startsWith('/api/')) {
       await handleApi(req, res, url);
@@ -1090,18 +1117,33 @@ const server = http.createServer(async (req, res) => {
       serveStatic(req, res, p);
     }
   } catch (e) {
-    send(res, 500, { error: 'server error', detail: String(e && e.message) });
+    reportRuntimeError('http.request', e);
+    send(res, 500, { error: 'server error' });
   }
 });
 
+loadConfig();
+
+let fatalHandling = false;
+function handleFatalRuntimeError(scope, error) {
+  if (fatalHandling) return;
+  fatalHandling = true;
+  reportRuntimeError(scope, error).finally(() => process.exit(1));
+  setTimeout(() => process.exit(1), 1500).unref();
+}
+process.on('uncaughtException', (error) => handleFatalRuntimeError('process.uncaughtException', error));
+process.on('unhandledRejection', (error) => handleFatalRuntimeError('process.unhandledRejection', error));
+server.on('error', (error) => handleFatalRuntimeError('server.error', error));
+
 server.listen(PORT, () => {
-  loadConfig();
   loadData();
   ensurePasswordHashes();
   cacheStatic();
   maybeBackup();
   checkReminders();
-  const timer = setInterval(() => { checkReminders(); auth.cleanupSessions(); }, 30000);
+  const timer = setInterval(() => {
+    try { checkReminders(); auth.cleanupSessions(); } catch (e) { reportRuntimeError('reminder.scheduler', e); }
+  }, 30000);
   timer.unref();
   console.log('==============================================');
   console.log('  会议排班台 MeetingBoard 已启动');

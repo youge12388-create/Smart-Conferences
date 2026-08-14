@@ -534,10 +534,12 @@ function renderList() {
       `<td data-label="${t('meetingType')}"><span class="tag tag-type">${esc(m.type || '-')}</span></td>`,
       `<td data-label="${t('employees')}">${m.employeeIds.map((id) => userOf(id)).filter(Boolean).map((u) => `<span class="mini-avatar" title="${esc(myName(u))}">${esc(initials(myName(u)))}</span>`).join('') || '-'}</td>`,
       `<td data-label="${t('channel')}">${esc(m.channel || '-')}</td>`,
-      `<td class="row-ops" data-label=""><button class="btn-link" data-view="${m.id}" data-i18n-view="view">${t('view')}</button></td>`
+      `<td class="row-ops" data-label=""><button class="btn-link" data-view="${m.id}" data-i18n-view="view">${t('view')}</button>${m.repeat === 'weekly' && st !== 'cancelled' ? '<button class="btn-link danger-link" data-cancel-series="' + m.id + '">' + t('cancelSeries') + '</button>' : ''}</td>`
     ].join('');
     tr.innerHTML = tds;
     tr.querySelector('[data-view]').onclick = () => openDetail(m.id);
+    const cancelSeries = tr.querySelector('[data-cancel-series]');
+    if (cancelSeries) cancelSeries.onclick = () => cancelMeetingSeries(m.id);
     tb.appendChild(tr);
   });
   $('listEmpty').classList.toggle('hidden', rows.length > 0);
@@ -922,6 +924,7 @@ function openMeetingModal(id, presetDate) {
   $('mCountry').value = m ? m.country : '';
   $('mType').value = m ? m.type : '';
   $('mChannel').value = m ? (m.channel || '') : '';
+  $('mMeetingUrl').value = m ? (m.meetingUrl || '') : '';
   $('mDate').value = m ? m.date : (presetDate || isoDate(new Date()));
   $('mStart').value = m ? m.start : '15:00';
   $('mEnd').value = m ? m.end : '16:00';
@@ -943,6 +946,7 @@ async function saveMeeting(ev) {
     country: $('mCountry').value.trim(),
     type: $('mType').value.trim(),
     channel: $('mChannel').value.trim(),
+    meetingUrl: $('mMeetingUrl').value.trim(),
     date: $('mDate').value,
     start: $('mStart').value,
     end: $('mEnd').value,
@@ -984,6 +988,7 @@ function openDetail(id, occurrenceDate) {
     <div class="detail-row"><span class="k">${t('meetingType')}</span><span class="v">${esc(m.type || '-')}</span></div>
     <div class="detail-row"><span class="k">${t('employees')}</span><span class="v">${esc(names) || '-'}</span></div>
     <div class="detail-row"><span class="k">${t('channel')}</span><span class="v">${esc(m.channel || '-')}</span></div>
+    ${m.meetingUrl ? `<div class="detail-row"><span class="k">${t('meetingLink')}</span><span class="v"><a href="${esc(m.meetingUrl)}" target="_blank" rel="noopener noreferrer">${t('openMeeting')}</a></span></div>` : ''}
     <div class="detail-row"><span class="k">${t('note')}</span><span class="v">${esc(m.note || '-')}</span></div>
     ${creator ? `<div class="detail-row"><span class="k">${t('createdBy')}</span><span class="v">${esc(myName(creator))}</span></div>` : ''}`;
 
@@ -1035,6 +1040,16 @@ function openDetail(id, occurrenceDate) {
     }
   }
   $('detailModal').classList.remove('hidden');
+}
+
+async function cancelMeetingSeries(id) {
+  const m = S.meetings.find((item) => item.id === id);
+  if (!m || m.repeat !== 'weekly' || !confirm(t('cancelSeriesConfirm'))) return;
+  try {
+    await api(`/api/meetings/${id}/status`, { method: 'PATCH', body: { status: 'cancelled' } });
+    toast(t('saved'));
+    await loadBootstrap();
+  } catch (e) { toast(e.message, 'error'); }
 }
 
 async function setMeetingStatus(status) {
@@ -1138,12 +1153,12 @@ function downloadFile(name, content, mime) {
 
 function exportCSV() {
   const rows = filteredMeetings();
-  const head = [t('date'), t('meetingTitle'), t('country'), t('meetingType'), t('employees'), t('channel'), t('startTime'), t('endTime'), t('note'), t('filterStatus')];
+  const head = [t('date'), t('meetingTitle'), t('country'), t('meetingType'), t('employees'), t('channel'), t('meetingLink'), t('startTime'), t('endTime'), t('note'), t('filterStatus')];
   const lines = [head.join(',')];
   rows.forEach((m) => {
     const names = m.employeeIds.map((uid) => userOf(uid)).filter(Boolean).map((u) => myName(u)).join('; ');
     const csv = (s) => `"${String(s == null ? '' : s).replace(/"/g, '""')}"`;
-    lines.push([m.date, csv(m.title), csv(m.country), csv(m.type), csv(names), csv(m.channel), m.start, m.end, csv(m.note), csv(t('st_' + statusOf(m)))].join(','));
+    lines.push([m.date, csv(m.title), csv(m.country), csv(m.type), csv(names), csv(m.channel), csv(m.meetingUrl), m.start, m.end, csv(m.note), csv(t('st_' + statusOf(m)))].join(','));
   });
   downloadFile(`meetings_${isoDate(new Date())}.csv`, '\ufeff' + lines.join('\r\n'), 'text/csv;charset=utf-8');
 }
@@ -1278,7 +1293,7 @@ function bindEvents() {
       $('meetingModal').classList.add('hidden');
       toastWithAction(t('deletedUndo'), t('undo'), async () => {
         try {
-          await api('/api/meetings', { method: 'POST', body: { title: clone.title, country: clone.country, type: clone.type, channel: clone.channel, date: clone.date, start: clone.start, end: clone.end, employeeIds: clone.employeeIds, note: clone.note, repeat: clone.repeat } });
+          await api('/api/meetings', { method: 'POST', body: { title: clone.title, country: clone.country, type: clone.type, channel: clone.channel, meetingUrl: clone.meetingUrl, date: clone.date, start: clone.start, end: clone.end, employeeIds: clone.employeeIds, note: clone.note, repeat: clone.repeat } });
           toast(t('saved'));
         } catch (e2) { toast(e2.message, 'error'); }
       });

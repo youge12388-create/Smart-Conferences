@@ -70,3 +70,25 @@ test('normalizeStore：审计记录安全迁移', () => {
   const s = m.normalizeStore({ auditLogs: [{ id: 1, action: 'auth.login', actorName: '张三', at: 2 }, null] });
   assert.deepEqual(s.auditLogs, [{ id: '1', at: 2, actorId: '', actorName: '张三', action: 'auth.login', target: '', details: '' }]);
 });
+
+
+test('cleanMeetingInput：会议链接仅允许 HTTP(S)', () => {
+  const ok = m.cleanMeetingInput({
+    title: '链接会议', date: '2026-08-13', start: '10:00', end: '11:00',
+    meetingUrl: 'https://meet.example.com/room'
+  });
+  assert.equal(ok.meeting.meetingUrl, 'https://meet.example.com/room');
+  assert.equal(m.cleanMeetingInput({
+    title: '链接会议', date: '2026-08-13', start: '10:00', end: '11:00',
+    meetingUrl: 'javascript:alert(1)'
+  }).error, 'meeting url must use http or https');
+});
+
+test('normalizeStore：保留合法会议链接并清理非法链接', () => {
+  const s = m.normalizeStore({ meetings: [
+    { id: 'ok', meetingUrl: 'http://meet.example.com', status: 'planned' },
+    { id: 'bad', meetingUrl: 'ftp://meet.example.com', status: 'planned' }
+  ] });
+  assert.equal(s.meetings[0].meetingUrl, 'http://meet.example.com');
+  assert.equal(s.meetings[1].meetingUrl, '');
+});
