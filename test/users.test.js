@@ -42,3 +42,18 @@ test('validateCurrentUserWecomBinding only allows a blank active local account t
   assert.equal(users.validateCurrentUserWecomBinding(members, 'u2', 'ZhangWei').error, 'local account already bound to another wecom user id');
   assert.equal(users.validateCurrentUserWecomBinding(members, 'u3', 'ZhangWei').error, 'local account unavailable');
 });
+
+test('resolveWecomLoginMember returns existing active members, rejects disabled ones, and prepares new members', () => {
+  const members = [
+    { id: 'u1', active: true, wecomUserId: 'ZhangWei' },
+    { id: 'u2', active: false, wecomUserId: 'LiNa' }
+  ];
+  const existing = users.resolveWecomLoginMember(members, ' ZhangWei ');
+  assert.equal(existing.status, 'existing');
+  assert.equal(existing.user.id, 'u1');
+  assert.equal(users.resolveWecomLoginMember(members, 'LiNa').error, 'wecom member disabled');
+  const fresh = users.resolveWecomLoginMember(members, ' WangLei ');
+  assert.equal(fresh.status, 'new');
+  assert.equal(fresh.wecomUserId, 'WangLei');
+  assert.equal(users.resolveWecomLoginMember(members, '').error, 'wecom user id unavailable');
+});
