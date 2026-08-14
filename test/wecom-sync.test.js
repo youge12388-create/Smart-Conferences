@@ -1,0 +1,34 @@
+'use strict';
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const sync = require('../lib/wecom-sync');
+
+const localUsers = [
+  { id: 'u_email', name: 'Alice', email: 'Alice@example.com', wecomUserId: '' },
+  { id: 'u_name', name: 'Bob', email: '', wecomUserId: '' },
+  { id: 'u_bound', name: 'Carol', email: 'carol@example.com', wecomUserId: 'carol-id' },
+  { id: 'u_dup1', name: 'Chris', email: '', wecomUserId: '' },
+  { id: 'u_dup2', name: 'Chris', email: '', wecomUserId: '' }
+];
+
+test('buildPreview prefers existing binding, then a unique email match', () => {
+  const result = sync.buildPreview(localUsers, [
+    { userid: 'carol-id', name: 'Different name' },
+    { userid: 'alice-id', name: 'Alice', email: 'alice@EXAMPLE.com' }
+  ]);
+  assert.deepEqual(result.map((x) => [x.status, x.suggestedUserId]), [
+    ['bound', 'u_bound'],
+    ['email-match', 'u_email']
+  ]);
+});
+
+test('buildPreview never auto-selects a name match and marks ambiguous names as conflicts', () => {
+  const result = sync.buildPreview(localUsers, [
+    { userid: 'bob-id', name: 'Bob' },
+    { userid: 'chris-id', name: 'Chris' }
+  ]);
+  assert.deepEqual(result.map((x) => [x.status, x.suggestedUserId]), [
+    ['name-match', 'u_name'],
+    ['conflict', '']
+  ]);
+});

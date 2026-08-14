@@ -406,6 +406,12 @@ textarea.input { resize: vertical; min-height: 52px; }
   border-radius: 8px; background: #FFF8E3; color: #705B13; font-size: 12px; line-height: 1.55;
 }
 .wecom-member-status.is-enabled { border-color: #9FC3B4; background: #EAF5EF; color: #1F5C4D; }
+.modal-lg { width: min(960px, calc(100vw - 32px)); }
+.sync-hint { margin: -4px 0 12px; color: var(--ink-3); font-size: 12px; line-height: 1.6; }
+.sync-summary { margin: 0 0 12px; padding: 9px 11px; border-radius: 8px; background: var(--surface-2); color: var(--ink-2); font-size: 12px; }
+.sync-table-wrap { max-height: 50vh; overflow: auto; }
+.sync-table code { font-size: 11px; color: var(--primary); }
+.sync-target { min-width: 190px; max-width: 270px; }
 .tz-badge {
   display: inline-flex; align-items: center; height: 24px; padding: 0 9px;
   background: var(--primary-soft); color: var(--primary); border-radius: 12px;
@@ -604,7 +610,9 @@ textarea.input { resize: vertical; min-height: 52px; }
     padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
     animation: sheetUp .28s cubic-bezier(.32, .72, .28, 1);
   }
-  .modal-sm { width: 100%; }
+  .modal-sm, .modal-lg { width: 100%; }
+  .sync-table-wrap { max-height: 48vh; }
+  .sync-target { width: 100%; max-width: none; }
   @keyframes sheetUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
   .form-row { gap: 8px; margin-bottom: 10px; }
   .modal-foot { position: sticky; bottom: 0; background: var(--surface); padding-top: 10px; }
