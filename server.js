@@ -20,6 +20,7 @@ const dates = require('./lib/dates');
 const meeting = require('./lib/meeting');
 const auth = require('./lib/auth');
 const users = require('./lib/users');
+const wecomSync = require('./lib/wecom-sync');
 const wecom = require('./lib/wecom');
 const mail = require('./lib/mail');
 
@@ -69,6 +70,26 @@ function validOauthState(state) {
   if (oauthStates.get(state) < Date.now()) { oauthStates.delete(state); return false; }
   oauthStates.delete(state);
   return true;
+}
+
+// 管理员同步预览仅保存在内存中，10 分钟失效，避免浏览器提交任意 userid。
+const wecomSyncPreviews = new Map();
+function createWecomSyncPreview(userId, entries) {
+  const id = crypto.randomBytes(16).toString('hex');
+  wecomSyncPreviews.set(id, {
+    userId,
+    expiresAt: Date.now() + 10 * 60 * 1000,
+    wecomUserIds: new Set(entries.map((entry) => entry.wecomUserId))
+  });
+  return id;
+}
+function getWecomSyncPreview(id, userId) {
+  const preview = wecomSyncPreviews.get(id);
+  if (!preview || preview.userId !== userId || preview.expiresAt < Date.now()) {
+    wecomSyncPreviews.delete(id);
+    return null;
+  }
+  return preview;
 }
 
 /* ------------------------------ 默认数据 ------------------------------ */
@@ -128,20 +149,24 @@ let lastBackupAt = 0;
 
 function pad(n) { return String(n).padStart(2, '0'); }
 
+function createBackup(label = '') {
+  if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
+  const safeLabel = /^[a-z0-9-]+$/i.test(label) ? '-' + label : '';
+  const t = new Date();
+  const name = `meetingboard${safeLabel}-${t.getFullYear()}${pad(t.getMonth() + 1)}${pad(t.getDate())}-${pad(t.getHours())}${pad(t.getMinutes())}${pad(t.getSeconds())}-${Date.now() % 1000}.json`;
+  fs.copyFileSync(DATA_FILE, path.join(BACKUP_DIR, name));
+  const files = fs.readdirSync(BACKUP_DIR).filter((f) => f.endsWith('.json')).sort();
+  while (files.length > 20) fs.unlinkSync(path.join(BACKUP_DIR, files.shift()));
+  return name;
+}
+
 // 每小时至多一次滚动备份，保留最近 20 份
 function maybeBackup() {
   const now = Date.now();
   if (now - lastBackupAt < 60 * 60 * 1000) return;
   try {
-    if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
-    const t = new Date();
-    const name = `meetingboard-${t.getFullYear()}${pad(t.getMonth() + 1)}${pad(t.getDate())}-${pad(t.getHours())}${pad(t.getMinutes())}${pad(t.getSeconds())}.json`;
-    fs.copyFileSync(DATA_FILE, path.join(BACKUP_DIR, name));
+    createBackup();
     lastBackupAt = now;
-    const files = fs.readdirSync(BACKUP_DIR).filter((f) => f.endsWith('.json')).sort();
-    while (files.length > 20) {
-      fs.unlinkSync(path.join(BACKUP_DIR, files.shift()));
-    }
   } catch (e) {
     console.log('[backup] 自动备份失败:', e && e.message ? e.message : e);
   }
@@ -165,6 +190,21 @@ function scheduleSave() {
       maybeBackup();
     });
   }, 300);
+}
+
+// 同步写入用于管理员确认的企微绑定：先完成备份，再原子落盘后才返回成功。
+function flushSave() {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  const snapshot = JSON.stringify(store);
+  saveChain = saveChain.then(() => {
+    const tmp = DATA_FILE + '.tmp';
+    fs.writeFileSync(tmp, snapshot, 'utf8');
+    fs.renameSync(tmp, DATA_FILE);
+  });
+  return saveChain;
 }
 
 /* ------------------------------ 会话与 Cookie ------------------------------ */
@@ -556,6 +596,64 @@ async function handleApi(req, res, url) {
         return send(res, 200, { ok: true });
       }
       return send(res, 400, { error: 'invalid request' });
+    }
+  }
+
+  // 企业微信通讯录同步：预览与写入均仅限管理员，Secret 不会返回浏览器。
+  if (parts[1] === 'wecom' && parts.length === 3 && (parts[2] === 'sync-preview' || parts[2] === 'sync-apply')) {
+    const authRes = requireUser(req, 'admin');
+    if (authRes.error) return send(res, authRes.error === 'permission denied' ? 403 : 401, { error: authRes.error });
+    if (!wecom.isConfigured()) return send(res, 400, { error: 'wecom not configured' });
+
+    if (parts[2] === 'sync-preview' && method === 'GET') {
+      const remoteUsers = await wecom.listVisibleMembers();
+      const entries = wecomSync.buildPreview(store.users, remoteUsers);
+      const syncId = createWecomSyncPreview(authRes.user.id, entries);
+      return send(res, 200, { syncId, expiresInSeconds: 600, entries });
+    }
+
+    if (parts[2] === 'sync-apply' && method === 'POST') {
+      const body = await readBody(req);
+      const preview = getWecomSyncPreview(String(body.syncId || ''), authRes.user.id);
+      if (!preview) return send(res, 400, { error: 'sync preview expired, refresh it and try again' });
+      const bindings = Array.isArray(body.bindings) ? body.bindings : [];
+      if (!bindings.length || bindings.length > 500) return send(res, 400, { error: 'invalid bindings' });
+
+      const seenUsers = new Set();
+      const seenWecomIds = new Set();
+      const validated = [];
+      for (const item of bindings) {
+        const userId = String(item && item.userId || '');
+        const wecomUserId = users.normalizeWecomUserId(item && item.wecomUserId);
+        const user = store.users.find((u) => u.id === userId);
+        if (!user || !user.active || !wecomUserId || !preview.wecomUserIds.has(wecomUserId)) {
+          return send(res, 400, { error: 'invalid sync binding' });
+        }
+        if (seenUsers.has(userId) || seenWecomIds.has(wecomUserId)) {
+          return send(res, 400, { error: 'duplicate sync binding' });
+        }
+        if (user.wecomUserId && users.normalizeWecomUserId(user.wecomUserId) !== wecomUserId) {
+          return send(res, 400, { error: 'member already has a different wecom user id' });
+        }
+        if (users.isWecomUserIdTaken(store.users, wecomUserId, userId)) {
+          return send(res, 400, { error: 'wecom user id already bound' });
+        }
+        seenUsers.add(userId);
+        seenWecomIds.add(wecomUserId);
+        validated.push({ user, wecomUserId });
+      }
+
+      let backupName;
+      try {
+        backupName = createBackup('wecom-sync');
+      } catch (e) {
+        return send(res, 500, { error: 'could not create backup before sync' });
+      }
+      for (const item of validated) item.user.wecomUserId = item.wecomUserId;
+      await flushSave();
+      wecomSyncPreviews.delete(String(body.syncId || ''));
+      broadcast('changed', {});
+      return send(res, 200, { ok: true, boundCount: validated.length, backupName });
     }
   }
 
