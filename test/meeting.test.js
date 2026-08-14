@@ -64,3 +64,9 @@ test('normalizeStore：空数据容错', () => {
   assert.deepEqual(s.meetings, []);
   assert.ok(Array.isArray(s.dictionaries.countries));
 });
+
+
+test('normalizeStore：审计记录安全迁移', () => {
+  const s = m.normalizeStore({ auditLogs: [{ id: 1, action: 'auth.login', actorName: '张三', at: 2 }, null] });
+  assert.deepEqual(s.auditLogs, [{ id: '1', at: 2, actorId: '', actorName: '张三', action: 'auth.login', target: '', details: '' }]);
+});
