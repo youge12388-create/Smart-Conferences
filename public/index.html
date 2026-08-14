@@ -32,9 +32,12 @@
       <button type="submit" class="btn btn-primary btn-block" data-i18n="loginBtn">登录</button>
     </form>
     <div id="loginDivider" class="login-divider hidden"><span data-i18n="orChoose">或使用企业微信登录</span></div>
-    <button id="wecomLoginBtn" class="btn btn-wecom hidden">
+    <button id="wecomLoginBtn" class="btn btn-wecom">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3c-4.4 0-8 2.9-8 6.5 0 2 .9 3.7 2.4 4.9l-.7 2.5 2.7-1.4c.6.2 1.1.3 1.7.4M12 21c4.4 0 8-2.9 8-6.5 0-2-.9-3.7-2.4-4.9l.7-2.5-2.7 1.4c-.6-.2-1.1-.3-1.7-.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <span data-i18n="wecomLogin">企业微信登录</span>
+    </button>
+    <button id="wecomQrBtn" class="btn btn-ghost btn-block">
+      <span data-i18n="wecomQrLogin">企业微信扫码登录</span>
     </button>
     <div class="seg lang-seg login-lang-seg" id="loginLangSeg">
       <button type="button" class="seg-item" data-setlang="zh">中文</button>
@@ -74,6 +77,10 @@
       <button class="nav-item hidden" id="navMembers" data-tab="members">
         <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="17" cy="9" r="2.4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M16.5 14.6c2.2.3 3.6 1.7 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
         <span data-i18n="nav_members">成员管理</span>
+      </button>
+      <button class="nav-item hidden" id="navAudit" data-tab="audit">
+        <svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span data-i18n="nav_audit">操作记录</span>
       </button>
     </nav>
     <div class="sidebar-foot">
@@ -241,6 +248,16 @@
         </div>
       </div>
     </section>
+    <section id="tab-audit" class="tab">
+      <div class="card">
+        <div class="filter-bar"><h3 data-i18n="auditTitle">操作记录</h3></div>
+        <div class="table-wrap">
+          <table class="table"><thead><tr><th data-i18n="auditTime">时间</th><th data-i18n="auditOperator">操作人</th><th data-i18n="auditAction">操作</th><th data-i18n="auditTarget">对象</th><th data-i18n="auditDetails">详情</th></tr></thead><tbody id="auditTbody"></tbody></table>
+          <div id="auditEmpty" class="empty hidden" data-i18n="auditEmpty">暂无操作记录</div>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <!-- 移动端底部导航 -->
@@ -261,6 +278,7 @@
       <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="17" cy="9" r="2.4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M16.5 14.6c2.2.3 3.6 1.7 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
       <span data-i18n="nav_members">成员管理</span>
     </button>
+      <button class="mnav-item hidden" data-tab="audit"><span data-i18n="nav_audit">操作记录</span></button>
   </nav>
 </div>
 
