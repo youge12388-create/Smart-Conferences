@@ -414,6 +414,14 @@ const MIME = {
 const staticCache = new Map();
 function cacheStatic() {
   const files = ['index.html', 'app.js', 'styles.css', 'i18n.js', 'favicon.svg'];
+  // Enterprise WeChat domain verification files are downloaded into public/.
+  // Keep this allowlist narrow so arbitrary files in the directory are never exposed.
+  try {
+    const verificationFiles = fs.readdirSync(PUBLIC_DIR).filter((f) =>
+      /^WW_verify_[A-Za-z0-9_-]+\.txt$/.test(f)
+    );
+    files.push(...verificationFiles);
+  } catch (e) { /* public/ is handled by the normal per-file fallback below */ }
   for (const f of files) {
     const fp = path.join(PUBLIC_DIR, f);
     try {
