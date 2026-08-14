@@ -17,6 +17,7 @@ const S = {
   meta: { reminderMinutes: 10, reminderSound: true, timezone: 'Asia/Shanghai' },
   wecom: { enabled: false },
   mail: { enabled: false },
+  auditLogs: [],
   tab: 'calendar',
   viewDate: new Date(),        // 日历当前月份
   listFilters: { country: '', type: '', employee: '', status: '', from: '', to: '', search: '' },
@@ -184,6 +185,7 @@ function applyData(data) {
   S.meta = data.meta || { reminderMinutes: 10, reminderSound: true, timezone: 'Asia/Shanghai' };
   S.wecom = data.wecom || { enabled: false };
   S.mail = data.mail || { enabled: false };
+  S.auditLogs = data.auditLogs || [];
   if (data.me) S.me = (data.users || []).find((u) => u.id === data.me) || null;
   renderAll();
 }
@@ -326,6 +328,7 @@ function renderAll() {
   renderList();
   renderStats();
   renderMembers();
+  renderAudit();
   renderBell();
   renderDatalists();
   updateTzBadge();
@@ -338,17 +341,25 @@ function enterApp() {
   $('app').classList.remove('hidden');
   $('meName').textContent = myName(S.me);
   $('navMembers').classList.toggle('hidden', !isAdmin());
-  document.querySelectorAll('#mobileNav .mnav-item[data-tab="members"]').forEach((b) => b.classList.toggle('hidden', !isAdmin()));
+  $('navAudit').classList.toggle('hidden', !isAdmin());
+  document.querySelectorAll('#mobileNav .mnav-item[data-tab="members"], #mobileNav .mnav-item[data-tab="audit"]').forEach((b) => b.classList.toggle('hidden', !isAdmin()));
   renderAll();
   if (typeof Notification !== 'undefined' && Notification.requestPermission) {
     Notification.requestPermission().catch(() => {});
   }
 }
 
+function showWecomLoginOptions() {
+  $('wecomLoginBtn').classList.remove('hidden');
+  $('wecomQrBtn').classList.remove('hidden');
+  $('loginDivider').classList.remove('hidden');
+}
+
 async function logout() {
   try { await api('/api/auth/logout', { method: 'POST' }); } catch (e) { /* 忽略 */ }
   S.me = null;
   $('app').classList.add('hidden');
+  showWecomLoginOptions();
   $('loginOverlay').classList.remove('hidden');
   $('loginForm').reset();
   $('loginError').classList.add('hidden');
@@ -360,10 +371,10 @@ function switchTab(tab) {
   document.querySelectorAll('.nav-item, .mnav-item').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   document.querySelectorAll('.tab').forEach((s) => s.classList.toggle('active', s.id === 'tab-' + tab));
   $('pageTitle').textContent = t({
-    calendar: 'nav_calendar', list: 'nav_list', stats: 'nav_stats', members: 'nav_members'
+    calendar: 'nav_calendar', list: 'nav_list', stats: 'nav_stats', members: 'nav_members', audit: 'nav_audit'
   }[tab]);
   $('monthNav').classList.toggle('hidden', tab !== 'calendar');
-  $('addMeetingBtn').classList.toggle('hidden', tab === 'members');
+  $('addMeetingBtn').classList.toggle('hidden', tab === 'members' || tab === 'audit');
   $('pageTitle').classList.toggle('m-hide', window.innerWidth <= 860 && tab === 'calendar');
 }
 
@@ -749,6 +760,21 @@ function renderMembers() {
         await loadBootstrap();
       } catch (e) { toast(e.message, 'error'); }
     };
+  });
+}
+
+function renderAudit() {
+  const body = $('auditTbody');
+  const empty = $('auditEmpty');
+  if (!body || !empty) return;
+  body.innerHTML = '';
+  const logs = isAdmin() ? S.auditLogs : [];
+  empty.classList.toggle('hidden', logs.length > 0);
+  logs.forEach((entry) => {
+    const row = document.createElement('tr');
+    const when = new Date(entry.at);
+    row.innerHTML = `<td>${esc(Number.isNaN(when.getTime()) ? '-' : when.toLocaleString())}</td><td>${esc(entry.actorName || '-')}</td><td>${esc(entry.action || '-')}</td><td>${esc(entry.target || '-')}</td><td>${esc(entry.details || '-')}</td>`;
+    body.appendChild(row);
   });
 }
 
@@ -1198,6 +1224,12 @@ function bindEvents() {
       if (r.url) window.location.href = r.url;
     } catch (e) { toast(e.message || '企业微信未配置', 'error'); }
   };
+  $('wecomQrBtn').onclick = async () => {
+    try {
+      const r = await api('/api/wecom/qr');
+      if (r.url) window.location.href = r.url;
+    } catch (e) { toast(e.message || '企业微信扫码登录未配置', 'error'); }
+  };
 
   // 导航
   const sb = () => document.querySelector('.sidebar');
@@ -1378,8 +1410,7 @@ function bindEvents() {
     } else {
       // 未登录：显示登录页
       S.wecom = data.wecom || { enabled: false };
-      $('wecomLoginBtn').classList.toggle('hidden', !S.wecom.enabled);
-      $('loginDivider').classList.toggle('hidden', !S.wecom.enabled);
+      showWecomLoginOptions();
       $('loginOverlay').classList.remove('hidden');
     }
   } catch (e) {
