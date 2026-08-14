@@ -697,6 +697,14 @@ function card(num, label, color) {
 /* ---------------- 成员管理 ---------------- */
 function renderMembers() {
   const tb = $('memberTbody');
+  const activeUsers = S.users.filter((u) => u.active);
+  const boundUsers = activeUsers.filter((u) => u.wecomUserId);
+  const wecomEnabled = !!(S.wecom && S.wecom.enabled);
+  const status = $('wecomMemberStatus');
+  status.classList.toggle('is-enabled', wecomEnabled);
+  status.textContent = wecomEnabled
+    ? `${t('wecomEnabled')} · ${t('wecomBoundSummary')} ${boundUsers.length}/${activeUsers.length} · ${t('wecomBindingHint')}`
+    : `${t('wecomNotConfigured')} · ${t('wecomBindingHint')}`;
   tb.innerHTML = '';
   if (!S.users.length) return;
   S.users.forEach((u) => {
@@ -708,7 +716,7 @@ function renderMembers() {
       <td data-label="${t('englishName')}">${esc(u.nameEn || '-')}</td>
       <td data-label="${t('role')}"><span class="tag tag-type">${u.role === 'admin' ? t('roleAdmin') : t('roleMember')}</span></td>
       <td data-label="${t('meetingCount')}">${cnt}</td>
-      <td data-label="${t('wecom')}">${u.wecomUserId ? `<span class="tag tag-country" style="background:#5B5EA6">${esc(u.wecomUserId)}</span>` : '<span style="color:var(--ink-3)">-</span>'}</td>
+      <td data-label="${t('wecom')}">${u.wecomUserId ? `<span class="tag tag-country" style="background:#5B5EA6">${esc(u.wecomUserId)}</span> <span class="tag tag-status st-bound">${t('wecomBound')}</span>` : `<span class="tag tag-status st-unbound">${t('wecomUnbound')}</span>`}</td>
       <td data-label="${t('email')}">${esc(u.email || '-')}</td>
       <td data-label="${t('active')}"><label class="switch"><input type="checkbox" data-uid="${u.id}" ${u.active ? 'checked' : ''}><span class="slider"></span></label></td>
       <td class="row-ops" data-label=""><button class="btn-link" data-edit="${u.id}">${t('edit')}</button> <button class="btn-link" data-resetpwd="${u.id}" style="color:var(--amber)">${t('resetPwd')}</button> <button class="btn-link" data-del="${u.id}" style="color:var(--danger)">${t('delete')}</button></td>`;
@@ -1254,13 +1262,17 @@ function bindEvents() {
       me: S.me ? S.me.id : ''
     };
     if (!body.name) { toast(t('required'), 'error'); return; }
+    if (body.wecomUserId && S.users.some((u) => u.id !== id && u.wecomUserId === body.wecomUserId)) {
+      toast(t('wecomUserIdDuplicate'), 'error');
+      return;
+    }
     try {
       if (id) await api('/api/users/' + id, { method: 'PATCH', body });
       else await api('/api/users', { method: 'POST', body });
       $('memberModal').classList.add('hidden');
       toast(t('saved'));
       await loadBootstrap();
-    } catch (e) { toast(e.message, 'error'); }
+    } catch (e) { toast(e.message === 'wecom user id already bound' ? t('wecomUserIdDuplicate') : e.message, 'error'); }
   };
 
   // 详情
