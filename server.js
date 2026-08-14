@@ -904,7 +904,13 @@ async function handleApi(req, res, url) {
         html = cbPage('未获取到授权码，请重试', false);
       } else {
         try {
-          const wecomUserId = users.normalizeWecomUserId(await wecom.getUserByCode(code));
+          const identity = await wecom.getUserByCode(code);
+          const wecomUserId = users.normalizeWecomUserId(identity && identity.userId);
+          if (!identity || !identity.userTicket) {
+            html = cbPage('企业微信授权未完成，或账号不在该应用可见范围内，请确认后重试', false);
+            return sendText(res, 403, html, 'text/html; charset=utf-8');
+          }
+
           let u;
           if (oauthState.bindUserId) {
             const binding = users.validateCurrentUserWecomBinding(store.users, oauthState.bindUserId, wecomUserId);
@@ -925,7 +931,36 @@ async function handleApi(req, res, url) {
               broadcast('changed', {});
             }
           } else {
-            u = wecomUserId && store.users.find((x) => users.normalizeWecomUserId(x.wecomUserId) === wecomUserId && x.active);
+            const loginMember = users.resolveWecomLoginMember(store.users, wecomUserId);
+            if (loginMember.error) {
+              html = cbPage('该企业微信账号对应成员已停用或授权信息无效，请联系管理员', false);
+              return sendText(res, 403, html, 'text/html; charset=utf-8');
+            }
+            if (loginMember.status === 'new') {
+              try {
+                createBackup('wecom-oauth-provision');
+              } catch (e) {
+                html = cbPage('首次企业微信登录失败：无法创建数据备份', false);
+                return sendText(res, 500, html, 'text/html; charset=utf-8');
+              }
+              u = {
+                id: uid('u'),
+                name: loginMember.wecomUserId,
+                nameEn: '',
+                wecomUserId: loginMember.wecomUserId,
+                email: '',
+                role: 'member',
+                active: true,
+                offDays: [],
+                passwordHash: auth.hashPassword(defaultPassword()),
+                createdAt: Date.now()
+              };
+              store.users.push(u);
+              await flushSave();
+              broadcast('changed', {});
+            } else {
+              u = loginMember.user;
+            }
           }
           if (u) {
             const token = auth.createSession(u.id);
@@ -933,7 +968,7 @@ async function handleApi(req, res, url) {
             html = cbPage('', true, `location.href='${base}';`);
             return sendText(res, 200, html, 'text/html; charset=utf-8', { 'Set-Cookie': sessionCookie(token) });
           }
-          html = cbPage('该企业微信账号未绑定成员或已停用，请联系管理员', false);
+          html = cbPage('企业微信登录失败，请联系管理员', false);
         } catch (e) {
           html = cbPage('企业微信验证失败：' + (e && e.message ? e.message : '未知错误') + '（请检查应用 Secret 与服务器IP白名单）', false);
         }
