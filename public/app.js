@@ -17,6 +17,8 @@ const S = {
   meta: { reminderMinutes: 10, reminderSound: true, timezone: 'Asia/Shanghai' },
   wecom: { enabled: false },
   mail: { enabled: false },
+  wecomSync: null,
+  wecomSyncSelections: {},
   tab: 'calendar',
   viewDate: new Date(),        // 日历当前月份
   listFilters: { country: '', type: '', employee: '', status: '', from: '', to: '', search: '' },
@@ -702,6 +704,7 @@ function renderMembers() {
   const wecomEnabled = !!(S.wecom && S.wecom.enabled);
   const status = $('wecomMemberStatus');
   status.classList.toggle('is-enabled', wecomEnabled);
+  $('wecomSyncBtn').classList.toggle('hidden', !wecomEnabled);
   status.textContent = wecomEnabled
     ? `${t('wecomEnabled')} · ${t('wecomBoundSummary')} ${boundUsers.length}/${activeUsers.length} · ${t('wecomBindingHint')}`
     : `${t('wecomNotConfigured')} · ${t('wecomBindingHint')}`;
@@ -750,6 +753,117 @@ function renderMembers() {
       } catch (e) { toast(e.message, 'error'); }
     };
   });
+}
+
+function wecomSyncStatus(entry) {
+  const labels = {
+    bound: t('wecomSyncStatusBound'),
+    'email-match': t('wecomSyncStatusEmail'),
+    'name-match': t('wecomSyncStatusName'),
+    conflict: t('wecomSyncStatusConflict'),
+    unmatched: t('wecomSyncStatusUnmatched')
+  };
+  return labels[entry.status] || t('wecomSyncStatusUnmatched');
+}
+
+function selectedWecomSyncBindings() {
+  const data = S.wecomSync || { entries: [] };
+  return data.entries.map((entry) => ({
+    userId: S.wecomSyncSelections[entry.wecomUserId] || '',
+    wecomUserId: entry.wecomUserId
+  })).filter((entry) => entry.userId);
+}
+
+function updateWecomSyncApplyButton() {
+  $('wecomSyncApplyBtn').disabled = selectedWecomSyncBindings().length === 0;
+}
+
+function renderWecomSyncPreview() {
+  const data = S.wecomSync;
+  const tb = $('wecomSyncTbody');
+  tb.innerHTML = '';
+  if (!data) return;
+  const unboundUsers = S.users.filter((u) => u.active && !u.wecomUserId);
+  const counts = data.entries.reduce((out, entry) => {
+    out[entry.status] = (out[entry.status] || 0) + 1;
+    return out;
+  }, {});
+  $('wecomSyncSummary').textContent =
+    `${data.entries.length} · ${t('wecomSyncStatusBound')} ${counts.bound || 0} · ${t('wecomSyncStatusEmail')} ${counts['email-match'] || 0} · ${t('wecomSyncStatusName')} ${counts['name-match'] || 0}`;
+
+  data.entries.forEach((entry) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td data-label="${t('name')}"><b>${esc(entry.name || '-')}</b></td>
+      <td data-label="${t('wecomUserId')}"><code>${esc(entry.wecomUserId)}</code></td>
+      <td data-label="${t('email')}">${esc(entry.email || '-')}</td>
+      <td data-label="${t('status')}"><span class="tag tag-status ${entry.status === 'bound' ? 'st-bound' : 'st-unbound'}">${esc(wecomSyncStatus(entry))}</span></td>
+      <td data-label="${t('wecomSyncTarget')}"></td>`;
+    const target = tr.lastElementChild;
+    if (entry.status === 'bound' || entry.status === 'conflict') {
+      target.textContent = entry.status === 'bound' ? t('wecomSyncStatusBound') : t('wecomSyncStatusConflict');
+    } else {
+      const select = document.createElement('select');
+      select.className = 'select sync-target';
+      select.innerHTML = `<option value="">${esc(t('wecomSyncNoTarget'))}</option>` +
+        unboundUsers.map((u) => `<option value="${esc(u.id)}">${esc(u.name)}${u.email ? ' · ' + esc(u.email) : ''}</option>`).join('');
+      select.value = S.wecomSyncSelections[entry.wecomUserId] || '';
+      select.onchange = () => {
+        S.wecomSyncSelections[entry.wecomUserId] = select.value;
+        updateWecomSyncApplyButton();
+      };
+      target.appendChild(select);
+    }
+    tb.appendChild(tr);
+  });
+  updateWecomSyncApplyButton();
+}
+
+async function loadWecomSyncPreview() {
+  if (!S.wecom || !S.wecom.enabled) {
+    toast(t('wecomNotConfigured'), 'error');
+    return;
+  }
+  const button = $('wecomSyncBtn');
+  button.disabled = true;
+  try {
+    const data = await api('/api/wecom/sync-preview');
+    S.wecomSync = data;
+    S.wecomSyncSelections = {};
+    for (const entry of data.entries) {
+      if (entry.status === 'email-match' && entry.suggestedUserId) {
+        S.wecomSyncSelections[entry.wecomUserId] = entry.suggestedUserId;
+      }
+    }
+    renderWecomSyncPreview();
+    $('wecomSyncModal').classList.remove('hidden');
+  } catch (e) {
+    toast(e.message || 'WeCom sync failed', 'error');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function applyWecomSync() {
+  const bindings = selectedWecomSyncBindings();
+  if (!bindings.length) {
+    toast(t('wecomSyncNoSelection'), 'error');
+    return;
+  }
+  const button = $('wecomSyncApplyBtn');
+  button.disabled = true;
+  try {
+    const result = await api('/api/wecom/sync-apply', {
+      method: 'POST',
+      body: { syncId: S.wecomSync.syncId, bindings }
+    });
+    $('wecomSyncModal').classList.add('hidden');
+    toast(`${t('wecomSyncApplied')}：${result.boundCount}`);
+    await loadBootstrap();
+  } catch (e) {
+    toast(e.message || 'WeCom sync failed', 'error');
+    updateWecomSyncApplyButton();
+  }
 }
 
 function openProfileModal() {
@@ -1240,6 +1354,9 @@ function bindEvents() {
   };
 
   // 成员弹窗
+  $('wecomSyncBtn').onclick = loadWecomSyncPreview;
+  $('wecomSyncRefreshBtn').onclick = loadWecomSyncPreview;
+  $('wecomSyncApplyBtn').onclick = applyWecomSync;
   $('addMemberBtn').onclick = () => openMemberModal(null);
   $('muOffAdd').onclick = () => {
     const d = $('muOffDate').value;
