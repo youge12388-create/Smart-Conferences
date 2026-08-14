@@ -23,6 +23,7 @@ const users = require('./lib/users');
 const wecomSync = require('./lib/wecom-sync');
 const wecom = require('./lib/wecom');
 const mail = require('./lib/mail');
+const audit = require('./lib/audit');
 
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, 'data');
@@ -60,9 +61,9 @@ function loadConfig() {
 
 // OAuth state 防 CSRF（内存态，10 分钟有效）
 const oauthStates = new Map();
-function newOauthState(bindUserId = '') {
+function newOauthState(bindUserId = '', mode = 'oauth') {
   const state = crypto.randomBytes(8).toString('hex');
-  oauthStates.set(state, { expiresAt: Date.now() + 10 * 60 * 1000, bindUserId });
+  oauthStates.set(state, { expiresAt: Date.now() + 10 * 60 * 1000, bindUserId, mode });
   return state;
 }
 function consumeOauthState(state) {
@@ -107,7 +108,8 @@ const DEFAULT_DATA = () => ({
   ],
   meetings: [],
   dictionaries: JSON.parse(JSON.stringify(meeting.DEFAULT_DICTIONARIES)),
-  meta: { reminderMinutes: 10, reminderSound: true, timezone: DEFAULT_TIMEZONE, createdAt: Date.now() }
+  meta: { reminderMinutes: 10, reminderSound: true, timezone: DEFAULT_TIMEZONE, createdAt: Date.now() },
+  auditLogs: []
 });
 
 /* ------------------------------ 数据存取 ------------------------------ */
@@ -376,6 +378,20 @@ function uid(prefix) {
   return prefix + '_' + crypto.randomBytes(4).toString('hex');
 }
 
+function recordAudit(actor, action, target = '', details = '') {
+  if (!store) return;
+  if (!Array.isArray(store.auditLogs)) store.auditLogs = [];
+  audit.appendAuditLog(store.auditLogs, {
+    id: uid('a'),
+    at: Date.now(),
+    actorId: actor && actor.id ? actor.id : '',
+    actorName: actor && actor.name ? actor.name : '',
+    action,
+    target,
+    details
+  });
+}
+
 function cleanMeetingInput(body) { return meeting.cleanMeetingInput(body); }
 
 // 自动将新出现的国家/会议类型补充进字典
@@ -529,9 +545,11 @@ async function handleApi(req, res, url) {
         meta: { timezone: store.meta.timezone }
       });
     }
-    return send(res, 200, Object.assign({}, store, {
+    const { auditLogs, ...safeStore } = store;
+    return send(res, 200, Object.assign({}, safeStore, {
       authenticated: true,
       me: authRes.user.id,
+      auditLogs: authRes.user.role === 'admin' ? auditLogs : [],
       wecom: { enabled: wecom.isConfigured() },
       mail: { enabled: mail.isConfigured() }
     }));
@@ -566,12 +584,19 @@ async function handleApi(req, res, url) {
         return send(res, 401, { error: 'invalid credentials' });
       }
       const token = auth.createSession(u.id);
+      recordAudit(u, 'auth.login.password');
+      scheduleSave();
       return send(res, 200, { user: u }, { 'Set-Cookie': sessionCookie(token) });
     }
     // POST /api/auth/logout
     if (parts[2] === 'logout' && method === 'POST') {
       const token = parseCookies(req)[auth.COOKIE_NAME];
+      const actor = auth.sessionUser(token, store.users);
       auth.destroySession(token);
+      if (actor) {
+        recordAudit(actor, 'auth.logout');
+        scheduleSave();
+      }
       return send(res, 200, { ok: true }, { 'Set-Cookie': clearSessionCookie() });
     }
     // PATCH /api/auth/password
@@ -586,6 +611,7 @@ async function handleApi(req, res, url) {
         const target = store.users.find((u) => u.id === body.userId);
         if (!target) return send(res, 404, { error: 'not found' });
         target.passwordHash = auth.hashPassword(defaultPassword());
+        recordAudit(me, 'user.password.reset', target.id, target.name);
         scheduleSave();
         return send(res, 200, { ok: true });
       }
@@ -595,6 +621,7 @@ async function handleApi(req, res, url) {
         }
         if (body.newPassword.length < 6) return send(res, 400, { error: 'password too short' });
         me.passwordHash = auth.hashPassword(body.newPassword);
+        recordAudit(me, 'user.password.change', me.id);
         scheduleSave();
         return send(res, 200, { ok: true });
       }
@@ -693,6 +720,7 @@ async function handleApi(req, res, url) {
         createdAt: Date.now()
       };
       store.users.push(user);
+      recordAudit(authRes.user, 'user.create', user.id, user.name);
       scheduleSave();
       broadcast('changed', {});
       return send(res, 200, { user });
@@ -723,6 +751,7 @@ async function handleApi(req, res, url) {
         if (typeof body.active === 'boolean') u.active = body.active;
         if (Array.isArray(body.offDays)) u.offDays = body.offDays.filter((d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d));
       }
+      recordAudit(authRes.user, 'user.update', u.id, u.name);
       scheduleSave();
       broadcast('changed', {});
       return send(res, 200, { user: u });
@@ -741,6 +770,7 @@ async function handleApi(req, res, url) {
         return send(res, 400, { error: 'cannot remove yourself' });
       }
       store.users.splice(idx, 1);
+      recordAudit(authRes.user, 'user.delete', removed.id, removed.name);
       // 会议中移除该成员引用
       for (const m of store.meetings) {
         m.employeeIds = m.employeeIds.filter((id) => id !== removed.id);
@@ -767,6 +797,7 @@ async function handleApi(req, res, url) {
       if (m.status !== status) {
         m.status = status;
         m.updatedAt = Date.now();
+        recordAudit(authRes.user, 'meeting.status', m.id, status);
         scheduleSave();
         broadcast('changed', {});
         notifyMeetingChange(m, status === 'cancelled' ? 'cancelled' : (status === 'done' ? 'done' : 'restored'), null, authRes.user);
@@ -787,6 +818,7 @@ async function handleApi(req, res, url) {
       const wasSkipped = idx >= 0;
       if (wasSkipped) m.skipDates.splice(idx, 1); else m.skipDates.push(date);
       m.updatedAt = Date.now();
+      recordAudit(authRes.user, 'meeting.occurrence', m.id, wasSkipped ? 'restored' : 'cancelled');
       scheduleSave();
       broadcast('changed', {});
       notifyMeetingChange(m, wasSkipped ? 'occurrenceRestored' : 'occurrenceCancelled', date, authRes.user);
@@ -806,6 +838,7 @@ async function handleApi(req, res, url) {
       else if (value === 'no') m.confirmations[authRes.user.id] = 'no';
       else delete m.confirmations[authRes.user.id];
       m.updatedAt = Date.now();
+      recordAudit(authRes.user, 'meeting.confirm', m.id, value);
       scheduleSave();
       broadcast('changed', {});
       return send(res, 200, { meeting: m });
@@ -830,6 +863,7 @@ async function handleApi(req, res, url) {
       };
       store.meetings.push(m);
       learnDictionaries(m);
+      recordAudit(authRes.user, 'meeting.create', m.id, m.title);
       scheduleSave();
       broadcast('changed', {});
       notifyMeetingChange(m, 'created', null, authRes.user);
@@ -847,6 +881,7 @@ async function handleApi(req, res, url) {
       const oldM = Object.assign({}, m);
       Object.assign(m, mt, { updatedAt: Date.now() });
       learnDictionaries(m);
+      recordAudit(authRes.user, 'meeting.update', m.id, m.title);
       scheduleSave();
       broadcast('changed', {});
       const action = meetingDiffAction(oldM, m);
@@ -862,6 +897,7 @@ async function handleApi(req, res, url) {
       if (idx < 0) return send(res, 404, { error: 'not found' });
       const removed = store.meetings[idx];
       store.meetings.splice(idx, 1);
+      recordAudit(authRes.user, 'meeting.delete', removed.id, removed.title);
       scheduleSave();
       broadcast('changed', {});
       notifyMeetingChange(removed, 'deleted', null, authRes.user);
@@ -893,6 +929,12 @@ async function handleApi(req, res, url) {
       if (!wecom.isConfigured()) return send(res, 400, { error: 'wecom not configured' });
       return send(res, 200, { url: wecom.buildAuthUrl(newOauthState()) });
     }
+    if (parts[2] === 'qr' && method === 'GET') {
+      if (!wecom.isConfigured()) return send(res, 400, { error: 'wecom not configured' });
+      const url = wecom.buildQrAuthUrl(newOauthState('', 'qr'));
+      if (!url) return send(res, 400, { error: 'wecom QR login not configured' });
+      return send(res, 200, { url });
+    }
     if (parts[2] === 'cb' && method === 'GET') {
       const code = url.searchParams.get('code') || '';
       const state = url.searchParams.get('state') || '';
@@ -906,7 +948,7 @@ async function handleApi(req, res, url) {
         try {
           const identity = await wecom.getUserByCode(code);
           const wecomUserId = users.normalizeWecomUserId(identity && identity.userId);
-          if (!identity || !identity.userTicket) {
+          if (!identity || (!identity.userTicket && oauthState.mode !== 'qr')) {
             html = cbPage('企业微信授权未完成，或账号不在该应用可见范围内，请确认后重试', false);
             return sendText(res, 403, html, 'text/html; charset=utf-8');
           }
@@ -963,6 +1005,8 @@ async function handleApi(req, res, url) {
             }
           }
           if (u) {
+            recordAudit(u, oauthState.bindUserId ? 'auth.wecom.bind' : (oauthState.mode === 'qr' ? 'auth.login.wecom_qr' : 'auth.login.wecom'));
+            await flushSave();
             const token = auth.createSession(u.id);
             const base = CONFIG.wecom.publicBase || '/';
             html = cbPage('', true, `location.href='${base}';`);
