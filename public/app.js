@@ -1383,7 +1383,8 @@ function bindEvents() {
   document.querySelectorAll('[data-close]').forEach((b) => {
     b.onclick = () => $(b.dataset.close).classList.add('hidden');
   });
-  document.querySelectorAll('.overlay').forEach((ov) => {
+  // 登录遮罩只能通过成功认证或退出后状态切换控制，不能被空白点击关闭。
+  document.querySelectorAll('.overlay:not(#loginOverlay)').forEach((ov) => {
     ov.addEventListener('click', (ev) => { if (ev.target === ov) ov.classList.add('hidden'); });
   });
   document.addEventListener('click', (ev) => {
