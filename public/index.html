@@ -225,7 +225,6 @@
         <div class="filter-bar">
           <h3 data-i18n="members">成员</h3>
           <div class="grow"></div>
-          <button id="wecomSyncBtn" class="btn btn-ghost btn-sm" data-i18n="wecomSyncMembers">同步企业微信通讯录</button>
           <button id="addMemberBtn" class="btn btn-primary btn-sm" data-i18n="addMember">添加成员</button>
         </div>
         <p id="wecomMemberStatus" class="wecom-member-status" role="status"></p>
@@ -400,33 +399,6 @@
 </div>
 
 <!-- 企业微信通讯录同步弹窗 -->
-<div id="wecomSyncModal" class="overlay hidden">
-  <div class="modal modal-lg">
-    <div class="modal-head">
-      <h3 data-i18n="wecomSyncTitle">企业微信通讯录同步预览</h3>
-      <button class="icon-btn" data-close="wecomSyncModal">×</button>
-    </div>
-    <p class="sync-hint" data-i18n="wecomSyncHint"></p>
-    <div id="wecomSyncSummary" class="sync-summary"></div>
-    <div class="table-wrap sync-table-wrap">
-      <table class="table sync-table">
-        <thead><tr>
-          <th data-i18n="name">姓名</th><th data-i18n="wecomUserId">企业微信 ID</th>
-          <th data-i18n="email">邮箱</th><th data-i18n="status">状态</th>
-          <th data-i18n="wecomSyncTarget">绑定到会议系统成员</th>
-        </tr></thead>
-        <tbody id="wecomSyncTbody"></tbody>
-      </table>
-    </div>
-    <div class="modal-foot">
-      <button type="button" id="wecomSyncRefreshBtn" class="btn btn-ghost" data-i18n="wecomSyncRefresh">刷新预览</button>
-      <div class="grow"></div>
-      <button type="button" class="btn btn-ghost" data-close="wecomSyncModal" data-i18n="cancel">取消</button>
-      <button type="button" id="wecomSyncApplyBtn" class="btn btn-primary" data-i18n="wecomSyncApply" disabled>确认写入绑定</button>
-    </div>
-  </div>
-</div>
-
 <!-- 会议详情弹窗 -->
 <div id="detailModal" class="overlay hidden">
   <div class="modal modal-sm">
@@ -464,7 +436,9 @@
         </label>
       </div>
       <p class="profile-hint" data-i18n="profileHint">邮箱用于接收会议提醒邮件；企业微信ID由管理员配置</p>
+      <p id="wecomBindStatus" class="profile-hint"></p>
     <div class="profile-pwd-row">
+      <button type="button" id="wecomBindBtn" class="btn btn-ghost btn-sm hidden" data-i18n="wecomBindCurrent">绑定当前企业微信</button>
       <button type="button" id="pwdBtn" class="btn btn-ghost btn-sm" data-i18n="changePwd">修改密码</button>
     </div>
     <div class="modal-foot">
