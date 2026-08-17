@@ -365,10 +365,16 @@
       </div>
       <p id="mTzHint" class="tz-hint"></p>
       <div class="form-row">
-        <label class="field grow">
-          <span data-i18n="employees">参会员工</span>
+        <div class="field grow">
+          <div class="field-head">
+            <span data-i18n="employees">参会员工</span>
+            <div class="emp-actions">
+              <button id="selAllEmps" type="button" class="btn-link" data-i18n="selectAll">全选</button>
+              <button id="selNoneEmps" type="button" class="btn-link" data-i18n="selectNone">清空</button>
+            </div>
+          </div>
           <div id="mEmployees" class="chip-group"></div>
-        </label>
+        </div>
       </div>
       <div class="form-row">
         <label class="field grow">

@@ -178,20 +178,19 @@ function fillCountryOptions(sel, values, placeholder) {
   const o0 = document.createElement('option');
   o0.value = ''; o0.textContent = placeholder;
   sel.appendChild(o0);
+  // 固定显示全部国家（不依赖服务器字典，字典过期时也能选到国家）
   const grouped = new Set(COUNTRY_GROUPS.flatMap((g) => g.countries));
   COUNTRY_GROUPS.forEach((g) => {
-    const opts = g.countries.filter((c) => values.includes(c));
-    if (!opts.length) return;
     const og = document.createElement('optgroup');
     og.label = g.region;
-    opts.forEach((c) => {
+    g.countries.forEach((c) => {
       const o = document.createElement('option');
       o.value = c; o.textContent = c;
       og.appendChild(o);
     });
     sel.appendChild(og);
   });
-  const extra = values.filter((v) => !grouped.has(v));
+  const extra = (values || []).filter((v) => v && !grouped.has(v));
   if (extra.length) {
     const og = document.createElement('optgroup');
     og.label = t('otherMarkets');
@@ -1533,6 +1532,8 @@ function bindEvents() {
   $('mDate').onchange = () => { checkConflicts(); updateTzHint(); };
   $('mStart').onchange = () => { checkConflicts(); updateTzHint(); };
   $('mEnd').onchange = () => { checkConflicts(); updateTzHint(); };
+  $('selAllEmps').onclick = () => { S._selEmps = activeUsers().map((u) => u.id); renderEmployeeChips(); checkConflicts(); };
+  $('selNoneEmps').onclick = () => { S._selEmps = []; renderEmployeeChips(); checkConflicts(); };
   $('mDelete').onclick = async () => {
     const id = $('mId').value;
     if (!id || !confirm(t('confirmDelete'))) return;
