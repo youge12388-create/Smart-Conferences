@@ -372,8 +372,23 @@ const CHANGE_LABELS = {
   occurrenceRestored: '本场已恢复 / Occurrence restored'
 };
 
+// 仅“删除会议”不发通知（企微/邮件/在线提示均不发），其余动作仍通知参会人
+const NOTIFY_CHANGE_ACTIONS = new Set(['created', 'updated', 'cancelled', 'done', 'restored', 'rescheduled', 'occurrenceCancelled', 'occurrenceRestored']);
+
 // 给参会人推送变更（企微/邮件），并向在线客户端广播 meetingChange
 function notifyMeetingChange(m, action, occurrence, byUser) {
+  if (!NOTIFY_CHANGE_ACTIONS.has(action)) return;
+  // 若该场次已进入提醒窗口，本次变更通知即充当开场提醒，避免同场次重复推送
+  if (action !== 'cancelled' && action !== 'done') {
+    const occ0 = dates.nextOccurrence(m, new Date());
+    if (occ0) {
+      const diffMin0 = (occ0.getTime() - Date.now()) / 60000;
+      if (diffMin0 >= 0 && diffMin0 <= (store.meta.reminderMinutes || 10)) {
+        notified.mark(m.id + '|' + dates.toDateStr(occ0), Date.now());
+      }
+    }
+  }
+
   const dateStr = occurrence || m.date || '';
   const label = CHANGE_LABELS[action] || '会议变更 / Meeting changed';
   const content =

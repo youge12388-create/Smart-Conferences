@@ -32,3 +32,26 @@ test('buildPreview never auto-selects a name match and marks ambiguous names as 
     ['conflict', '']
   ]);
 });
+
+test('buildPreview marks duplicated email matches as conflict', () => {
+  const local = [
+    { id: 'e1', name: 'A', email: 'dup@example.com', wecomUserId: '' },
+    { id: 'e2', name: 'B', email: 'dup@example.com', wecomUserId: '' }
+  ];
+  const result = sync.buildPreview(local, [{ userid: 'r1', name: 'X', email: 'DUP@example.com' }]);
+  assert.deepEqual(result.map((x) => [x.status, x.suggestedUserId]), [['conflict', '']]);
+});
+
+test('buildPreview marks one wecom id bound to multiple local users as conflict', () => {
+  const local = [
+    { id: 'a', name: 'A', email: '', wecomUserId: 'same' },
+    { id: 'b', name: 'B', email: '', wecomUserId: 'same' }
+  ];
+  const result = sync.buildPreview(local, [{ userid: 'same', name: 'A' }]);
+  assert.deepEqual(result.map((x) => [x.status, x.suggestedUserId]), [['conflict', '']]);
+});
+
+test('buildPreview drops remote entries without userid', () => {
+  const result = sync.buildPreview([], [{ userid: '' }, { name: 'x' }]);
+  assert.deepEqual(result, []);
+});

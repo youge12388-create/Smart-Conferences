@@ -18,6 +18,7 @@ const S = {
   wecom: { enabled: false },
   mail: { enabled: false },
   auditLogs: [],
+  unreadReminders: 0,          // 未读提醒数（铃铛红点，打开面板即清空）
   tab: 'calendar',
   viewDate: new Date(),        // 日历当前月份
   listFilters: { country: '', type: '', employee: '', status: '', from: '', to: '', search: '' },
@@ -255,6 +256,7 @@ function pushReminder(payload) {
   notifyBrowser(title, body);
   S.reminders.unshift({ ...payload, at: Date.now() });
   if (S.reminders.length > 20) S.reminders.length = 20;
+  S.unreadReminders += 1;
   renderBell();
   toast(`${m.title} · ${fmtTimeRange(m, payload.occurrence)} · ${when}`, 'warn');
 }
@@ -587,12 +589,19 @@ function renderBars(el, items, colorFn) {
     el.innerHTML = `<div class="empty">${t('noStats')}</div>`;
     return;
   }
+  const total = items.reduce((s, x) => s + x.count, 0);
+  const totalMin = items.reduce((s, x) => s + (x.minutes || 0), 0);
+  const summary = document.createElement('div');
+  summary.className = 'bars-summary';
+  summary.textContent = `${t('statTotal')} ${total}${t('countUnit')} · ${fmtHours(totalMin)}${t('hourUnit')}`;
+  el.appendChild(summary);
   const max = Math.max(...items.map((i) => i.count), 1);
   items.forEach((i) => {
     const row = document.createElement('div');
     row.className = 'bar-row';
     const label = document.createElement('div');
     label.className = 'bar-label'; label.textContent = i.key; label.title = i.key;
+    if (i.minutes) row.title = `${i.key} · ${fmtHours(i.minutes)}${t('hourUnit')}`;
     const track = document.createElement('div');
     track.className = 'bar-track';
     const fill = document.createElement('div');
@@ -602,8 +611,8 @@ function renderBars(el, items, colorFn) {
     track.appendChild(fill);
     const val = document.createElement('div');
     val.className = 'bar-val';
-    const total = items.reduce((s, x) => s + x.count, 0);
-    val.innerHTML = `${i.count}<span class="bar-pct"> · ${total ? Math.round((i.count / total) * 100) : 0}%</span>`;
+    const pct = total ? Math.round((i.count / total) * 100) : 0;
+    val.innerHTML = `${i.count}${t('countUnit')}<span class="bar-pct"> · ${pct}%</span>`;
     row.appendChild(label); row.appendChild(track); row.appendChild(val);
     el.appendChild(row);
   });
@@ -653,9 +662,16 @@ function renderStats() {
   }).sort((a, b) => b.count - a.count);
   const empMax = Math.max(...empItems.map((i) => i.count), 1);
   $('employeeBars').innerHTML = '';
+  const empTotal = empItems.reduce((s, x) => s + x.count, 0);
+  const empMin = empItems.reduce((s, x) => s + x.minutes, 0);
+  const empSummary = document.createElement('div');
+  empSummary.className = 'bars-summary';
+  empSummary.textContent = `${t('statTotal')} ${empTotal}${t('countUnit')} · ${fmtHours(empMin)}${t('hourUnit')}`;
+  $('employeeBars').appendChild(empSummary);
   empItems.forEach((i) => {
     const row = document.createElement('div');
     row.className = 'bar-row';
+    row.title = `${i.key} · ${i.count}${t('countUnit')} · ${fmtHours(i.minutes)}${t('hourUnit')}`;
     const label = document.createElement('div');
     label.className = 'bar-label';
     label.innerHTML = `<b>${esc(i.key)}</b>`;
@@ -686,18 +702,17 @@ function renderStats() {
   $('trendChart').innerHTML = '';
   trend.forEach((x) => {
     const col = document.createElement('div');
-    col.className = 'trend-col';
+    col.className = 'trend-col' + (x.count === 0 ? ' zero' : '');
     const bar = document.createElement('div');
-    bar.className = 'trend-bar';
-    bar.style.height = Math.max(4, (x.count / tMax) * 100) + '%';
-    const tip = document.createElement('div');
-    tip.className = 'tip';
-    tip.textContent = `${x.count}${t('countUnit')}`;
-    bar.appendChild(tip);
+    bar.className = 'trend-bar' + (x.count > 0 && x.count === tMax ? ' max' : '');
+    bar.style.height = Math.max(x.count ? 6 : 2, (x.count / tMax) * 100) + '%';
+    const cnt = document.createElement('div');
+    cnt.className = 'trend-count';
+    cnt.textContent = x.count;
     const lab = document.createElement('div');
     lab.className = 'trend-label';
     lab.textContent = x.label;
-    col.appendChild(bar); col.appendChild(lab);
+    col.appendChild(cnt); col.appendChild(bar); col.appendChild(lab);
     $('trendChart').appendChild(col);
   });
 }
@@ -1107,9 +1122,9 @@ function renderBell() {
   const list = upcomingMeetings();
   const recent = S.reminders.length;
   const badge = $('bellCount');
-  const total = list.length + recent;
-  badge.classList.toggle('hidden', total === 0);
-  badge.textContent = total > 99 ? '99+' : total;
+  const unread = S.unreadReminders || 0;
+  badge.classList.toggle('hidden', unread === 0);
+  badge.textContent = unread > 99 ? '99+' : unread;
 
   const box = $('bellList');
   box.innerHTML = '';
@@ -1348,6 +1363,7 @@ function bindEvents() {
   $('bellBtn').onclick = (ev) => {
     ev.stopPropagation();
     $('bellPanel').classList.toggle('hidden');
+    if (!$('bellPanel').classList.contains('hidden')) S.unreadReminders = 0; // 打开面板即标记已读
     renderBell();
   };
   $('remindSettingsBtn').onclick = () => {

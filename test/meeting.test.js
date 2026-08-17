@@ -92,3 +92,37 @@ test('normalizeStore：保留合法会议链接并清理非法链接', () => {
   assert.equal(s.meetings[0].meetingUrl, 'http://meet.example.com');
   assert.equal(s.meetings[1].meetingUrl, '');
 });
+
+test('cleanMeetingInput: non-weekly repeat resets, equal times rejected', () => {
+  const r = m.cleanMeetingInput({ title: 'x', date: '2026-08-13', start: '10:00', end: '11:00', repeat: 'monthly' });
+  assert.equal(r.meeting.repeat, null);
+  assert.equal(m.cleanMeetingInput({ title: 'x', date: '2026-08-13', start: '10:00', end: '10:00' }).error, 'end must be after start');
+});
+
+test('cleanMeetingInput: non-array employeeIds tolerated', () => {
+  const r = m.cleanMeetingInput({ title: 'x', date: '2026-08-13', start: '10:00', end: '11:00', employeeIds: 'u1' });
+  assert.deepEqual(r.meeting.employeeIds, []);
+});
+
+test('normalizeStore: keeps valid meta and fills user defaults', () => {
+  const s = m.normalizeStore({
+    meta: { reminderMinutes: 25, reminderSound: false, timezone: 'Europe/London' },
+    users: [{ id: 'u1', passwordHash: { salt: 'x' } }]
+  });
+  assert.equal(s.meta.reminderMinutes, 25);
+  assert.equal(s.meta.reminderSound, false);
+  assert.equal(s.meta.timezone, 'Europe/London');
+  assert.equal(typeof s.meta.createdAt, 'number');
+  assert.equal(s.users[0].active, true);
+  assert.equal(s.users[0].passwordHash, null); // invalid hash placeholder
+});
+
+test('normalizeStore: partial dictionaries replaced, confirmations array reset', () => {
+  const s = m.normalizeStore({
+    dictionaries: { countries: ['X'] },
+    meetings: [{ id: 'm1', confirmations: ['a'], status: 'weird' }]
+  });
+  assert.deepEqual(s.dictionaries, JSON.parse(JSON.stringify(m.DEFAULT_DICTIONARIES)));
+  assert.deepEqual(s.meetings[0].confirmations, {});
+  assert.equal(s.meetings[0].status, 'planned');
+});

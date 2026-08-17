@@ -72,3 +72,28 @@ test('startOfWeek：周一起始', () => {
   const d = new Date(2026, 7, 13); // 周四
   assert.equal(dates.isoDate(dates.startOfWeek(d)), '2026-08-10');
 });
+
+test('isSkipped tolerates non-array skipDates', () => {
+  assert.equal(dates.isSkipped({ skipDates: '2026-08-10' }, '2026-08-10'), false);
+  assert.equal(dates.isSkipped({}, '2026-08-10'), false);
+});
+
+test('occursOn weekly ignores same weekday before base date', () => {
+  const m = weekly({ date: '2026-08-03' }); // Monday
+  assert.equal(dates.occursOn(m, '2026-07-27'), false);
+});
+
+test('occurrences single meeting: out of range or self-cancelled', () => {
+  const single = { date: '2026-08-10', repeat: null };
+  assert.deepEqual(dates.occurrences(single, '2026-08-01', '2026-08-09'), []);
+  const cancelled = { date: '2026-08-10', repeat: null, skipDates: ['2026-08-10'] };
+  assert.deepEqual(dates.occurrences(cancelled, '2026-08-01', '2026-08-31'), []);
+});
+
+test('nextOccurrence invalid date returns null', () => {
+  assert.equal(dates.nextOccurrence({ date: 'bad', start: '10:00', repeat: null }, new Date()), null);
+});
+
+test('minutesOf missing end counts 0', () => {
+  assert.equal(dates.minutesOf({ start: '10:00' }), 0);
+});
