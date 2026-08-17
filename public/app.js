@@ -24,6 +24,8 @@ const S = {
   listFilters: { country: '', type: '', employee: '', status: '', from: '', to: '', search: '' },
   statsScope: 'all',
   statsView: 'team',
+  statsTrendMetric: 'count',    // 趋势图指标：count | minutes
+  statsEmpSort: 'count',        // 员工排行排序：count | minutes
   reminders: [],               // 已收到的提醒（铃铛列表）
   editingId: null,
   detailId: null,
@@ -558,15 +560,41 @@ function scopeStart(scope) {
 }
 
 // 统计口径：范围内（截至今天）实际应开场次，已取消不计，周重复按实际场次计
-function scopedRows() {
-  const from = scopeStart(S.statsScope) || '0000-01-01';
-  const to = isoDate(new Date());
+function rowsInRange(from, to) {
   const rows = [];
   for (const m of S.meetings) {
     if (statusOf(m) === 'cancelled') continue;
     for (const d of D.occurrences(m, from, to)) rows.push({ m, date: d });
   }
   return rows;
+}
+
+function scopedRows() {
+  return rowsInRange(scopeStart(S.statsScope) || '0000-01-01', isoDate(new Date()));
+}
+
+// 上一同长周期（用于环比），'all' 返回 null
+function prevPeriod(scope) {
+  const now = new Date();
+  if (scope === 'month') {
+    const f = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const t = new Date(now.getFullYear(), now.getMonth(), 0);
+    return { from: isoDate(f), to: isoDate(t) };
+  }
+  if (scope === '3m') {
+    const t = new Date(now); t.setDate(t.getDate() - 90);
+    const f = new Date(t); f.setDate(f.getDate() - 90);
+    return { from: isoDate(f), to: isoDate(t) };
+  }
+  if (scope === 'year') {
+    return { from: `${now.getFullYear() - 1}-01-01`, to: `${now.getFullYear() - 1}-12-31` };
+  }
+  return null;
+}
+
+function deltaPct(cur, prev) {
+  if (!prev) return null;
+  return Math.round(((cur - prev) / prev) * 100);
 }
 
 function aggBy(list, keyFn) {
@@ -583,6 +611,13 @@ function aggBy(list, keyFn) {
 
 function fmtHours(min) { return (min / 60).toFixed(1); }
 
+function niceMax(v) {
+  if (!(v > 0)) return 1;
+  const p = Math.pow(10, Math.floor(Math.log10(v)));
+  const n = v / p;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p;
+}
+
 function renderBars(el, items, colorFn) {
   el.innerHTML = '';
   if (!items.length) {
@@ -595,27 +630,209 @@ function renderBars(el, items, colorFn) {
   summary.className = 'bars-summary';
   summary.textContent = `${t('statTotal')} ${total}${t('countUnit')} · ${fmtHours(totalMin)}${t('hourUnit')}`;
   el.appendChild(summary);
+  const legend = document.createElement('div');
+  legend.className = 'bars-legend';
+  legend.innerHTML = `<span class="lg-dot lg-count"></span>${t('statShare')}<span class="lg-dot lg-hours"></span>${t('statHoursShare')}`;
+  el.appendChild(legend);
   const max = Math.max(...items.map((i) => i.count), 1);
+  const maxMin = Math.max(...items.map((i) => i.minutes || 0), 1);
   items.forEach((i) => {
     const row = document.createElement('div');
     row.className = 'bar-row';
+    const pct = total ? Math.round((i.count / total) * 100) : 0;
+    row.title = `${i.key} · ${i.count}${t('countUnit')} · ${fmtHours(i.minutes)}${t('hourUnit')} · ${pct}%`;
     const label = document.createElement('div');
     label.className = 'bar-label'; label.textContent = i.key; label.title = i.key;
-    if (i.minutes) row.title = `${i.key} · ${fmtHours(i.minutes)}${t('hourUnit')}`;
     const track = document.createElement('div');
     track.className = 'bar-track';
     const fill = document.createElement('div');
     fill.className = 'bar-fill';
     fill.style.background = colorFn(i.key);
     fill.style.width = Math.max(3, (i.count / max) * 100) + '%';
-    track.appendChild(fill);
+    const sub = document.createElement('div');
+    sub.className = 'bar-fill sub';
+    sub.style.width = Math.max(2, ((i.minutes || 0) / maxMin) * 100) + '%';
+    track.appendChild(fill); track.appendChild(sub);
     const val = document.createElement('div');
     val.className = 'bar-val';
-    const pct = total ? Math.round((i.count / total) * 100) : 0;
     val.innerHTML = `${i.count}${t('countUnit')}<span class="bar-pct"> · ${pct}%</span>`;
     row.appendChild(label); row.appendChild(track); row.appendChild(val);
     el.appendChild(row);
   });
+}
+
+function renderTrend(el, rows) {
+  const now = new Date();
+  const ws = D.startOfWeek(now);
+  const weeks = [];
+  for (let i = 11; i >= 0; i--) {
+    const s = new Date(ws); s.setDate(ws.getDate() - i * 7);
+    const e = new Date(s); e.setDate(s.getDate() + 6);
+    const sISO = isoDate(s), eISO = isoDate(e);
+    const wk = rows.filter((r) => r.date >= sISO && r.date <= eISO);
+    weeks.push({
+      label: `${s.getMonth() + 1}/${s.getDate()}`,
+      range: `${s.getMonth() + 1}/${s.getDate()}–${e.getMonth() + 1}/${e.getDate()}`,
+      count: wk.length,
+      minutes: wk.reduce((sum, r) => sum + D.minutesOf(r.m), 0)
+    });
+  }
+  el.innerHTML = '';
+  if (!rows.length) {
+    el.innerHTML = `<div class="empty">${t('noStats')}</div>`;
+    return;
+  }
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const W = 720, H = 220, padL = 46, padR = 14, padT = 14, padB = 28;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const metric = S.statsTrendMetric === 'minutes' ? 'minutes' : 'count';
+  const max = niceMax(Math.max(...weeks.map((w) => w[metric]), 0));
+  const x = (i) => padL + (i * plotW) / (weeks.length - 1);
+  const y = (v) => padT + plotH * (1 - (max ? v / max : 0));
+  const pts = weeks.map((w, i) => ({ x: x(i), y: y(w[metric]), v: w[metric] }));
+  const fmtTick = (v) => metric === 'minutes'
+    ? (v >= 60 ? `${(v / 60).toFixed(1)}${t('hourUnit')}` : `${Math.round(v)}${t('minUnit')}`)
+    : (Number.isInteger(v) ? String(v) : v.toFixed(1));
+
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  svg.setAttribute('role', 'img');
+
+  const defs = document.createElementNS(SVG_NS, 'defs');
+  const gid = 'trendFill_' + (el.id || 'chart');
+  const grad = document.createElementNS(SVG_NS, 'linearGradient');
+  grad.id = gid;
+  grad.setAttribute('x1', '0'); grad.setAttribute('y1', '0'); grad.setAttribute('x2', '0'); grad.setAttribute('y2', '1');
+  const st1 = document.createElementNS(SVG_NS, 'stop');
+  st1.setAttribute('offset', '0%'); st1.setAttribute('stop-color', '#1F5C4D'); st1.setAttribute('stop-opacity', '.26');
+  const st2 = document.createElementNS(SVG_NS, 'stop');
+  st2.setAttribute('offset', '100%'); st2.setAttribute('stop-color', '#1F5C4D'); st2.setAttribute('stop-opacity', '.02');
+  grad.appendChild(st1); grad.appendChild(st2); defs.appendChild(grad); svg.appendChild(defs);
+
+  const grid = document.createElementNS(SVG_NS, 'g');
+  grid.setAttribute('class', 'trend-grid');
+  const ticks = max > 1 ? [0, max / 2, max] : [0, max];
+  ticks.forEach((tv) => {
+    const line = document.createElementNS(SVG_NS, 'line');
+    line.setAttribute('x1', padL); line.setAttribute('x2', W - padR);
+    line.setAttribute('y1', y(tv)); line.setAttribute('y2', y(tv));
+    grid.appendChild(line);
+    const text = document.createElementNS(SVG_NS, 'text');
+    text.setAttribute('x', padL - 6); text.setAttribute('y', y(tv) + 3);
+    text.setAttribute('text-anchor', 'end');
+    text.textContent = fmtTick(tv);
+    grid.appendChild(text);
+  });
+  svg.appendChild(grid);
+
+  const xlabels = document.createElementNS(SVG_NS, 'g');
+  weeks.forEach((w, i) => {
+    const text = document.createElementNS(SVG_NS, 'text');
+    text.setAttribute('class', 'trend-x');
+    text.setAttribute('x', x(i));
+    text.setAttribute('y', padT + plotH + 16);
+    text.setAttribute('text-anchor', 'middle');
+    text.textContent = w.label;
+    xlabels.appendChild(text);
+  });
+  svg.appendChild(xlabels);
+
+  // 本周高亮
+  const band = document.createElementNS(SVG_NS, 'rect');
+  band.setAttribute('x', pts[pts.length - 1].x - plotW / 22);
+  band.setAttribute('y', padT);
+  band.setAttribute('width', plotW / 11);
+  band.setAttribute('height', plotH);
+  band.setAttribute('class', 'trend-band');
+  svg.appendChild(band);
+
+  const linePath = pts.map((p, i) => `${i ? 'L' : 'M'} ${p.x} ${p.y}`).join(' ');
+  const area = document.createElementNS(SVG_NS, 'path');
+  area.setAttribute('class', 'trend-area');
+  area.setAttribute('d', `${linePath} L ${pts[pts.length - 1].x} ${padT + plotH} L ${pts[0].x} ${padT + plotH} Z`);
+  area.setAttribute('fill', `url(#${gid})`);
+  svg.appendChild(area);
+  const line = document.createElementNS(SVG_NS, 'path');
+  line.setAttribute('class', 'trend-line');
+  line.setAttribute('d', linePath);
+  svg.appendChild(line);
+
+  const maxVal = Math.max(...weeks.map((w) => w[metric]), 0);
+  const dots = document.createElementNS(SVG_NS, 'g');
+  pts.forEach((p) => {
+    const dot = document.createElementNS(SVG_NS, 'circle');
+    dot.setAttribute('class', 'trend-dot' + (p.v > 0 && p.v === maxVal ? ' max' : ''));
+    dot.setAttribute('cx', p.x); dot.setAttribute('cy', p.y);
+    dot.setAttribute('r', p.v > 0 ? 3.5 : 2);
+    dots.appendChild(dot);
+  });
+  svg.appendChild(dots);
+
+  const tip = document.createElement('div');
+  tip.className = 'trend-tip hidden';
+  const guide = document.createElement('div');
+  guide.className = 'trend-guide hidden';
+  const showTip = (i) => {
+    const w = weeks[i];
+    tip.innerHTML = `<b>${esc(w.range)}</b><div>${t('statMeetings')} ${w.count} · ${t('statDurationShort')} ${fmtHours(w.minutes)}${t('hourUnit')}</div>`;
+    tip.style.left = Math.min(Math.max((x(i) / W) * 100, 10), 90) + '%';
+    guide.style.left = (x(i) / W) * 100 + '%';
+    guide.style.top = (padT / H) * 100 + '%';
+    guide.style.height = (plotH / H) * 100 + '%';
+    tip.classList.remove('hidden');
+    guide.classList.remove('hidden');
+  };
+  const hideTip = () => { tip.classList.add('hidden'); guide.classList.add('hidden'); };
+
+  const hits = document.createElementNS(SVG_NS, 'g');
+  const slot = plotW / weeks.length;
+  pts.forEach((p, i) => {
+    const hit = document.createElementNS(SVG_NS, 'rect');
+    hit.setAttribute('x', p.x - slot / 2);
+    hit.setAttribute('y', padT);
+    hit.setAttribute('width', slot);
+    hit.setAttribute('height', plotH);
+    hit.setAttribute('class', 'trend-hit');
+    hit.addEventListener('mousemove', () => showTip(i));
+    hit.addEventListener('mouseleave', hideTip);
+    hits.appendChild(hit);
+  });
+  svg.appendChild(hits);
+
+  el.appendChild(svg);
+  el.appendChild(tip);
+  el.appendChild(guide);
+}
+
+function renderEmployeeStats(rows) {
+  const el = $('employeeBars');
+  el.innerHTML = '';
+  const sortBy = S.statsEmpSort === 'minutes' ? 'minutes' : 'count';
+  const items = activeUsers().map((u) => {
+    const ms = rows.filter((r) => r.m.employeeIds.includes(u.id));
+    return { id: u.id, key: myName(u), count: ms.length, minutes: ms.reduce((s, r) => s + D.minutesOf(r.m), 0) };
+  }).filter((i) => i.count > 0);
+  if (!items.length) {
+    el.innerHTML = `<div class="empty">${t('noStats')}</div>`;
+    return;
+  }
+  items.sort((a, b) => b[sortBy] - a[sortBy] || b.count - a.count);
+  const max = Math.max(...items.map((i) => i[sortBy]), 1);
+  const list = document.createElement('div');
+  list.className = 'rank-list';
+  items.forEach((i, idx) => {
+    const isMe = i.id === (S.me && S.me.id);
+    const row = document.createElement('div');
+    row.className = 'rank-row' + (isMe ? ' me' : '');
+    row.innerHTML =
+      `<div class="rank-no">${idx + 1}</div>` +
+      `<div class="rank-main"><div class="rank-name">${esc(i.key)}${isMe ? `<span class="rank-tag">${t('statMe')}</span>` : ''}</div>` +
+      `<div class="rank-track"><div class="rank-fill" style="width:${Math.max(2, (i[sortBy] / max) * 100)}%"></div></div></div>` +
+      `<div class="rank-nums"><div class="rank-count">${i.count}${t('countUnit')}</div><div class="rank-hours">${fmtHours(i.minutes)}${t('hourUnit')}</div></div>`;
+    list.appendChild(row);
+  });
+  el.appendChild(list);
 }
 
 function renderStats() {
@@ -626,100 +843,58 @@ function renderStats() {
   $('statsMineView').classList.toggle('hidden', !isMine);
   document.querySelectorAll('#statsView .seg-item').forEach((b) => b.classList.toggle('active', b.dataset.view === S.statsView));
   document.querySelectorAll('#statsScope .seg-item').forEach((b) => b.classList.toggle('active', b.dataset.scope === S.statsScope));
+  document.querySelectorAll('#trendMetricTeam .seg-item, #trendMetricMine .seg-item').forEach((b) => b.classList.toggle('active', b.dataset.metric === S.statsTrendMetric));
+  document.querySelectorAll('#empSort .seg-item').forEach((b) => b.classList.toggle('active', b.dataset.sort === S.statsEmpSort));
+
+  const prev = prevPeriod(S.statsScope);
+  const prevRows = prev ? rowsInRange(prev.from, prev.to) : null;
+  const deltaPctOf = (arr, fn) => {
+    if (!prevRows) return null;
+    const c = arr.reduce((s, r) => s + fn(r), 0);
+    const p = prevRows.reduce((s, r) => s + fn(r), 0);
+    return deltaPct(c, p);
+  };
+  const dCount = deltaPctOf(rows, () => 1);
+  const dMinutes = deltaPctOf(rows, (r) => D.minutesOf(r.m));
 
   if (isMine) {
     const totalMin = mine.reduce((s, r) => s + D.minutesOf(r.m), 0);
     const countries = new Set(mine.map((r) => r.m.country).filter(Boolean)).size;
-    const types = new Set(mine.map((r) => r.m.type).filter(Boolean)).size;
+    const parts = mine.reduce((s, r) => s + (r.m.employeeIds || []).length, 0);
     $('mineSummary').innerHTML = [
-      card(mine.length, t('statMeetings'), 'amber'),
-      card(fmtHours(totalMin), t('statHours'), 'amber'),
+      card(mine.length, t('statMeetings'), 'amber', dCount),
+      card(fmtHours(totalMin), t('statHours'), 'amber', dMinutes),
+      card(parts, t('statParticipants'), 'amber'),
       card(countries, t('statCountries'), 'amber'),
-      card(types, t('statTypes'), 'amber')
+      card(mine.length ? fmtHours(totalMin / mine.length) : '0', t('statAvgDuration'), 'amber')
     ].join('');
     renderBars($('mineCountryBars'), aggBy(mine, (r) => r.m.country || '-'), (k) => countryColor(k));
     renderBars($('mineTypeBars'), aggBy(mine, (r) => r.m.type || '-'), () => '#1F5C4D');
+    renderTrend($('mineTrendChart'), mine);
     return;
   }
 
   // 团队视图
   const totalMin = rows.reduce((s, r) => s + D.minutesOf(r.m), 0);
   const countries = new Set(rows.map((r) => r.m.country).filter(Boolean)).size;
-  const activeCount = activeUsers().length;
+  const parts = rows.reduce((s, r) => s + (r.m.employeeIds || []).length, 0);
   $('statCards').innerHTML = [
-    card(rows.length, t('statMeetings'), 'primary'),
-    card(fmtHours(totalMin), t('statHours'), 'primary'),
+    card(rows.length, t('statMeetings'), 'primary', dCount),
+    card(fmtHours(totalMin), t('statHours'), 'primary', dMinutes),
+    card(parts, t('statParticipants'), 'primary'),
     card(countries, t('statCountries'), 'primary'),
-    card(activeCount, t('nav_members'), 'primary')
+    card(rows.length ? fmtHours(totalMin / rows.length) : '0', t('statAvgDuration'), 'primary')
   ].join('');
   renderBars($('countryBars'), aggBy(rows, (r) => r.m.country || '-'), (k) => countryColor(k));
   renderBars($('typeBars'), aggBy(rows, (r) => r.m.type || '-'), () => '#1F5C4D');
-
-  // 员工统计
-  const empItems = activeUsers().map((u) => {
-    const ms = rows.filter((r) => r.m.employeeIds.includes(u.id));
-    return { key: myName(u), count: ms.length, minutes: ms.reduce((s, r) => s + D.minutesOf(r.m), 0), id: u.id };
-  }).sort((a, b) => b.count - a.count);
-  const empMax = Math.max(...empItems.map((i) => i.count), 1);
-  $('employeeBars').innerHTML = '';
-  const empTotal = empItems.reduce((s, x) => s + x.count, 0);
-  const empMin = empItems.reduce((s, x) => s + x.minutes, 0);
-  const empSummary = document.createElement('div');
-  empSummary.className = 'bars-summary';
-  empSummary.textContent = `${t('statTotal')} ${empTotal}${t('countUnit')} · ${fmtHours(empMin)}${t('hourUnit')}`;
-  $('employeeBars').appendChild(empSummary);
-  empItems.forEach((i) => {
-    const row = document.createElement('div');
-    row.className = 'bar-row';
-    row.title = `${i.key} · ${i.count}${t('countUnit')} · ${fmtHours(i.minutes)}${t('hourUnit')}`;
-    const label = document.createElement('div');
-    label.className = 'bar-label';
-    label.innerHTML = `<b>${esc(i.key)}</b>`;
-    const track = document.createElement('div'); track.className = 'bar-track';
-    const fill = document.createElement('div'); fill.className = 'bar-fill';
-    fill.style.background = i.id === (S.me && S.me.id) ? '#B4651A' : '#1F5C4D';
-    fill.style.width = Math.max(3, (i.count / empMax) * 100) + '%';
-    track.appendChild(fill);
-    const val = document.createElement('div');
-    val.className = 'bar-val';
-    val.textContent = `${i.count}${t('countUnit')} · ${fmtHours(i.minutes)}${t('hourUnit')}`;
-    row.appendChild(label); row.appendChild(track); row.appendChild(val);
-    $('employeeBars').appendChild(row);
-  });
-
-  // 近12周趋势
-  const trend = [];
-  const now = new Date();
-  const ws = D.startOfWeek(now);
-  for (let i = 11; i >= 0; i--) {
-    const s = new Date(ws); s.setDate(ws.getDate() - i * 7);
-    const e = new Date(s); e.setDate(s.getDate() + 6);
-    const sISO = isoDate(s), eISO = isoDate(e);
-    const cnt = rows.filter((r) => r.date >= sISO && r.date <= eISO).length;
-    trend.push({ label: `${s.getMonth() + 1}/${s.getDate()}`, count: cnt });
-  }
-  const tMax = Math.max(...trend.map((x) => x.count), 1);
-  $('trendChart').innerHTML = '';
-  trend.forEach((x) => {
-    const col = document.createElement('div');
-    col.className = 'trend-col' + (x.count === 0 ? ' zero' : '');
-    const bar = document.createElement('div');
-    bar.className = 'trend-bar' + (x.count > 0 && x.count === tMax ? ' max' : '');
-    bar.style.height = Math.max(x.count ? 6 : 2, (x.count / tMax) * 100) + '%';
-    const cnt = document.createElement('div');
-    cnt.className = 'trend-count';
-    cnt.textContent = x.count;
-    const lab = document.createElement('div');
-    lab.className = 'trend-label';
-    lab.textContent = x.label;
-    col.appendChild(cnt); col.appendChild(bar); col.appendChild(lab);
-    $('trendChart').appendChild(col);
-  });
+  renderEmployeeStats(rows);
+  renderTrend($('trendChart'), rows);
 }
 
-function card(num, label, color) {
+function card(num, label, color, delta) {
   const c = color === 'amber' ? 'var(--amber)' : 'var(--primary)';
-  return `<div class="stat-card"><div class="num" style="color:${c}">${num}</div><div class="label">${esc(label)}</div></div>`;
+  const badge = delta == null ? '' : `<span class="delta ${delta >= 0 ? 'up' : 'down'}">${delta >= 0 ? '↑' : '↓'}${Math.abs(delta)}%</span>`;
+  return `<div class="stat-card"><div class="num" style="color:${c}">${num}${badge}</div><div class="label">${esc(label)}</div></div>`;
 }
 
 /* ---------------- 成员管理 ---------------- */
@@ -1292,6 +1467,17 @@ function bindEvents() {
   // 统计
   document.querySelectorAll('#statsScope .seg-item').forEach((b) => { b.onclick = () => { S.statsScope = b.dataset.scope; renderStats(); }; });
   document.querySelectorAll('#statsView .seg-item').forEach((b) => { b.onclick = () => { S.statsView = b.dataset.view; renderStats(); }; });
+  document.querySelectorAll('#trendMetricTeam .seg-item, #trendMetricMine .seg-item').forEach((b) => { b.onclick = () => { S.statsTrendMetric = b.dataset.metric; renderStats(); }; });
+  document.querySelectorAll('#empSort .seg-item').forEach((b) => { b.onclick = () => { S.statsEmpSort = b.dataset.sort; renderStats(); }; });
+  const empCollapseBtn = $('empCollapseBtn');
+  if (empCollapseBtn) {
+    empCollapseBtn.title = t('empStatsToggle');
+    empCollapseBtn.onclick = () => {
+      const body = $('employeeBars');
+      const closed = body.classList.toggle('collapsed');
+      empCollapseBtn.classList.toggle('closed', closed);
+    };
+  }
   $('exportStatsBtn').onclick = exportCSV;
 
   // 会议弹窗

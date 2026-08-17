@@ -200,12 +200,29 @@
               <div id="typeBars" class="bars"></div>
             </div>
             <div class="stat-panel wide">
-              <h3 data-i18n="statTrend">近12周趋势</h3>
+              <div class="panel-head">
+                <h3 data-i18n="statTrend">近12周趋势</h3>
+                <div class="seg seg-sm" id="trendMetricTeam">
+                  <button class="seg-item active" data-metric="count" data-i18n="rankMeetings">场次</button>
+                  <button class="seg-item" data-metric="minutes" data-i18n="statDurationShort">时长</button>
+                </div>
+              </div>
               <div id="trendChart" class="trend"></div>
             </div>
             <div class="stat-panel wide">
-              <h3 data-i18n="statByEmployee">按员工统计</h3>
-              <div id="employeeBars" class="bars"></div>
+              <div class="panel-head">
+                <h3 data-i18n="statByEmployee">按员工统计</h3>
+                <div class="panel-head-actions">
+                  <div class="seg seg-sm" id="empSort">
+                    <button class="seg-item active" data-sort="count" data-i18n="rankMeetings">场次</button>
+                    <button class="seg-item" data-sort="minutes" data-i18n="rankHours">小时</button>
+                  </div>
+                  <button id="empCollapseBtn" class="icon-btn btn-sm closed" type="button" title="">
+                    <span class="chev">▾</span>
+                  </button>
+                </div>
+              </div>
+              <div id="employeeBars" class="bars collapsible collapsed"></div>
             </div>
           </div>
         </div>
@@ -220,6 +237,16 @@
             <div class="stat-panel">
               <h3 data-i18n="statByType">按类型统计</h3>
               <div id="mineTypeBars" class="bars"></div>
+            </div>
+            <div class="stat-panel wide">
+              <div class="panel-head">
+                <h3 data-i18n="statTrend">近12周趋势</h3>
+                <div class="seg seg-sm" id="trendMetricMine">
+                  <button class="seg-item active" data-metric="count" data-i18n="rankMeetings">场次</button>
+                  <button class="seg-item" data-metric="minutes" data-i18n="statDurationShort">时长</button>
+                </div>
+              </div>
+              <div id="mineTrendChart" class="trend"></div>
             </div>
           </div>
         </div>
