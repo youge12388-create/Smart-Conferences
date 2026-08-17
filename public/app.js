@@ -155,14 +155,62 @@ function updateTzHint() {
 /* ---------------- 市场配色 ---------------- */
 const COUNTRY_COLORS = {
   '南亚': '#1F7A68', 'South Asia': '#1F7A68',
+  '印度': '#1F7A68', '尼泊尔': '#1F7A68', '不丹': '#1F7A68', '斯里兰卡': '#1F7A68', '马尔代夫': '#1F7A68', '孟加拉国': '#C05A4A',
   '中亚': '#5B5EA6', 'CIS': '#5B5EA6',
+  '哈萨克斯坦': '#5B5EA6', '吉尔吉斯斯坦': '#5B5EA6', '塔吉克斯坦': '#5B5EA6', '乌兹别克斯坦': '#5B5EA6', '土库曼斯坦': '#5B5EA6',
   '尼日利亚': '#3A8F4F', 'Nigeria': '#3A8F4F',
   '巴基斯坦': '#B4651A', 'Pakistan': '#B4651A',
   '孟加拉': '#C05A4A', 'Bangladesh': '#C05A4A',
   '东南亚': '#7A5EA6', 'Southeast Asia': '#7A5EA6',
+  '越南': '#7A5EA6', '老挝': '#7A5EA6', '柬埔寨': '#7A5EA6', '泰国': '#7A5EA6', '缅甸': '#7A5EA6', '马来西亚': '#7A5EA6', '新加坡': '#7A5EA6', '印度尼西亚': '#7A5EA6', '文莱': '#7A5EA6', '菲律宾': '#7A5EA6', '东帝汶': '#7A5EA6',
   '中东': '#2E7DA6', 'Middle East': '#2E7DA6',
   '其他': '#8A8A86', 'Other': '#8A8A86'
 };
+// 国家市场分组（下拉按区域归类，移动端原生选择器同样生效）
+const COUNTRY_GROUPS = [
+  { region: '南亚', countries: ['印度', '巴基斯坦', '孟加拉国', '尼泊尔', '不丹', '斯里兰卡', '马尔代夫'] },
+  { region: '中亚', countries: ['哈萨克斯坦', '吉尔吉斯斯坦', '塔吉克斯坦', '乌兹别克斯坦', '土库曼斯坦'] },
+  { region: '东南亚', countries: ['越南', '老挝', '柬埔寨', '泰国', '缅甸', '马来西亚', '新加坡', '印度尼西亚', '文莱', '菲律宾', '东帝汶'] }
+];
+
+function fillCountryOptions(sel, values, placeholder) {
+  sel.innerHTML = '';
+  const o0 = document.createElement('option');
+  o0.value = ''; o0.textContent = placeholder;
+  sel.appendChild(o0);
+  const grouped = new Set(COUNTRY_GROUPS.flatMap((g) => g.countries));
+  COUNTRY_GROUPS.forEach((g) => {
+    const opts = g.countries.filter((c) => values.includes(c));
+    if (!opts.length) return;
+    const og = document.createElement('optgroup');
+    og.label = g.region;
+    opts.forEach((c) => {
+      const o = document.createElement('option');
+      o.value = c; o.textContent = c;
+      og.appendChild(o);
+    });
+    sel.appendChild(og);
+  });
+  const extra = values.filter((v) => !grouped.has(v));
+  if (extra.length) {
+    const og = document.createElement('optgroup');
+    og.label = t('otherMarkets');
+    extra.forEach((v) => {
+      const o = document.createElement('option');
+      o.value = v; o.textContent = v;
+      og.appendChild(o);
+    });
+    sel.appendChild(og);
+  }
+}
+
+// 国家 → 区域映射（统计按区域聚合；未归类市场计入“其他”）；空值保持 '-' 与旧口径一致
+function regionOf(c) {
+  if (!c) return '-';
+  const hit = COUNTRY_GROUPS.find((g) => g.countries.includes(c) || g.region === c);
+  return hit ? hit.region : '其他';
+}
+
 function countryColor(c) {
   if (COUNTRY_COLORS[c]) return COUNTRY_COLORS[c];
   const hit = Object.keys(COUNTRY_COLORS).find((k) => k !== '其他' && c && c.includes(k));
@@ -334,7 +382,7 @@ function renderAll() {
   renderMembers();
   renderAudit();
   renderBell();
-  renderDatalists();
+  renderFormLists();
   updateTzBadge();
 }
 
@@ -495,7 +543,8 @@ function renderList() {
     });
     sel.value = selected;
   };
-  setOpts($('fCountry'), S.dicts.countries, f.country, t('filterCountry'));
+  fillCountryOptions($('fCountry'), S.dicts.countries, t('filterCountry'));
+  $('fCountry').value = f.country || '';
   setOpts($('fType'), S.dicts.types, f.type, t('filterType'));
   const stSel = $('fStatus');
   stSel.innerHTML = '';
@@ -859,7 +908,7 @@ function renderStats() {
 
   if (isMine) {
     const totalMin = mine.reduce((s, r) => s + D.minutesOf(r.m), 0);
-    const countries = new Set(mine.map((r) => r.m.country).filter(Boolean)).size;
+    const countries = new Set(mine.map((r) => regionOf(r.m.country)).filter((k) => k && k !== '其他')).size;
     const parts = mine.reduce((s, r) => s + (r.m.employeeIds || []).length, 0);
     $('mineSummary').innerHTML = [
       card(mine.length, t('statMeetings'), 'amber', dCount),
@@ -868,7 +917,7 @@ function renderStats() {
       card(countries, t('statCountries'), 'amber'),
       card(mine.length ? fmtHours(totalMin / mine.length) : '0', t('statAvgDuration'), 'amber')
     ].join('');
-    renderBars($('mineCountryBars'), aggBy(mine, (r) => r.m.country || '-'), (k) => countryColor(k));
+    renderBars($('mineCountryBars'), aggBy(mine, (r) => regionOf(r.m.country)), (k) => countryColor(k));
     renderBars($('mineTypeBars'), aggBy(mine, (r) => r.m.type || '-'), () => '#1F5C4D');
     renderTrend($('mineTrendChart'), mine);
     return;
@@ -876,7 +925,7 @@ function renderStats() {
 
   // 团队视图
   const totalMin = rows.reduce((s, r) => s + D.minutesOf(r.m), 0);
-  const countries = new Set(rows.map((r) => r.m.country).filter(Boolean)).size;
+  const countries = new Set(rows.map((r) => regionOf(r.m.country)).filter((k) => k && k !== '其他')).size;
   const parts = rows.reduce((s, r) => s + (r.m.employeeIds || []).length, 0);
   $('statCards').innerHTML = [
     card(rows.length, t('statMeetings'), 'primary', dCount),
@@ -885,7 +934,7 @@ function renderStats() {
     card(countries, t('statCountries'), 'primary'),
     card(rows.length ? fmtHours(totalMin / rows.length) : '0', t('statAvgDuration'), 'primary')
   ].join('');
-  renderBars($('countryBars'), aggBy(rows, (r) => r.m.country || '-'), (k) => countryColor(k));
+  renderBars($('countryBars'), aggBy(rows, (r) => regionOf(r.m.country)), (k) => countryColor(k));
   renderBars($('typeBars'), aggBy(rows, (r) => r.m.type || '-'), () => '#1F5C4D');
   renderEmployeeStats(rows);
   renderTrend($('trendChart'), rows);
@@ -1044,10 +1093,9 @@ function renderOffChips() {
 }
 
 /* ---------------- 会议弹窗 ---------------- */
-function renderDatalists() {
-  const cl = $('countryList'), tl = $('typeList');
-  cl.innerHTML = '';
-  S.dicts.countries.forEach((v) => { const o = document.createElement('option'); o.value = v; cl.appendChild(o); });
+function renderFormLists() {
+  fillCountryOptions($('mCountry'), S.dicts.countries, t('selectCountry'));
+  const tl = $('typeList');
   tl.innerHTML = '';
   S.dicts.types.forEach((v) => { const o = document.createElement('option'); o.value = v; tl.appendChild(o); });
 }

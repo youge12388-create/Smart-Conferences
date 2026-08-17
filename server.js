@@ -268,6 +268,9 @@ function broadcast(event, payload) {
 // 已提醒集合：key = meetingId|YYYY-MM-DD。48 小时后自动释放，避免长期运行累积。
 const notified = reminderState.createDeliveryTracker();
 
+// 到点二次提醒（会议开始时提醒未确认参会人）：当前已暂停，需恢复时改为 true
+const ASK_REMINDER_ENABLED = false;
+
 function escapeCardText(value) {
   return String(value || '').replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
 }
@@ -332,7 +335,7 @@ function checkReminders() {
         pushToTargets(targets, content, card);
       }
     }
-    if (diffMin <= 0 && diffMin > -10) {
+    if (ASK_REMINDER_ENABLED && diffMin <= 0 && diffMin > -10) {
       const askKey = `${m.id}|${dates.toDateStr(occ)}|ask`;
       if (!notified.has(askKey, now.getTime())) {
         const unconfirmed = (m.employeeIds || []).filter((id) => !m.confirmations || m.confirmations[id] !== 'yes');
