@@ -1137,6 +1137,22 @@ function renderEmployeeChips() {
     };
     box.appendChild(chip);
   });
+  demoEmpIds().forEach((id) => {
+    const demoUser = orgDemoUser(id.slice('demo:'.length));
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'person-chip sel demo';
+    chip.textContent = demoUser ? demoUser.name : id;
+    chip.title = t('wecomDemoBadge');
+    chip.onclick = () => {
+      const set = S._selEmps;
+      const i = set.indexOf(id);
+      if (i >= 0) set.splice(i, 1);
+      renderEmployeeChips();
+      checkConflicts();
+    };
+    box.appendChild(chip);
+  });
 }
 
 function checkConflicts() {
@@ -1173,6 +1189,215 @@ function checkConflicts() {
   box.classList.remove('hidden');
 }
 
+/* ---------------- 企业微信组织架构选择 ---------------- */
+let _wecomOrg = null;          // { tree, users, rootId }
+let _wecomOrgSel = new Set();  // 已选 userid
+let _wecomOrgExpanded = new Set(['root']);
+
+// 本地预览用示例组织架构：仅在 ?wecomDemo=1 且未配置企微时启用，不会建号或发送
+const WECOM_DEMO_TREE = [
+  {
+    id: 2, name: '市场部', order: 1, users: [
+      { userid: 'demo_mk1', name: '张三' },
+      { userid: 'demo_mk2', name: '李四' }
+    ],
+    children: [
+      { id: 4, name: '策划组', order: 1, users: [{ userid: 'demo_pl1', name: '王五' }], children: [] },
+      { id: 5, name: '渠道组', order: 2, users: [{ userid: 'demo_qd1', name: '赵六' }], children: [] }
+    ]
+  },
+  {
+    id: 3, name: '研发部', order: 2, users: [{ userid: 'demo_rd1', name: '孙七' }],
+    children: [
+      { id: 6, name: '后端组', order: 1, users: [{ userid: 'demo_hd1', name: '周八' }], children: [] }
+    ]
+  }
+];
+
+function isWecomDemo() {
+  return new URLSearchParams(window.location.search).get('wecomDemo') === '1';
+}
+
+function orgDemoUser(userid) {
+  let found = null;
+  (function walk(nodes) {
+    for (const n of nodes) {
+      const hit = (n.users || []).find((u) => u.userid === userid);
+      if (hit) { found = hit; return; }
+      walk(n.children || []);
+    }
+  })(WECOM_DEMO_TREE);
+  return found;
+}
+
+function isDemoEmpId(id) { return typeof id === 'string' && id.startsWith('demo:'); }
+function demoEmpIds() { return (S._selEmps || []).filter(isDemoEmpId); }
+
+function orgAllUserids(node) {
+  const ids = (node.users || []).map((u) => u.userid);
+  (node.children || []).forEach((c) => ids.push(...orgAllUserids(c)));
+  return ids;
+}
+
+function orgDeptChecked(node) {
+  const ids = orgAllUserids(node);
+  return ids.length > 0 && ids.every((id) => _wecomOrgSel.has(id));
+}
+
+function orgDeptIndeterminate(node) {
+  const ids = orgAllUserids(node);
+  const picked = ids.filter((id) => _wecomOrgSel.has(id)).length;
+  return picked > 0 && picked < ids.length;
+}
+
+function orgToggleDept(node, checked) {
+  orgAllUserids(node).forEach((id) => {
+    if (checked) _wecomOrgSel.add(id); else _wecomOrgSel.delete(id);
+  });
+}
+
+function orgUserRow(user, depth) {
+  const row = document.createElement('div');
+  row.className = 'org-row org-user';
+  row.style.paddingLeft = (34 + depth * 20) + 'px';
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.checked = _wecomOrgSel.has(user.userid);
+  cb.onchange = () => {
+    if (cb.checked) _wecomOrgSel.add(user.userid); else _wecomOrgSel.delete(user.userid);
+    renderOrgTree();
+  };
+  row.appendChild(cb);
+  const name = document.createElement('span');
+  name.className = 'org-name';
+  name.textContent = user.name || user.userid;
+  row.appendChild(name);
+  const boundInfo = (_wecomOrg && _wecomOrg.users || []).find((x) => x.userid === user.userid);
+  const isBound = boundInfo ? boundInfo.bound : !!user.bound;
+  if (!isBound) {
+    const badge = document.createElement('span');
+    badge.className = 'tag tag-status st-unbound';
+    badge.textContent = t('wecomOrgAuto');
+    row.appendChild(badge);
+  }
+  return row;
+}
+
+function orgDeptRow(node, depth) {
+  const row = document.createElement('div');
+  row.className = 'org-row org-dept';
+  row.style.paddingLeft = (12 + depth * 20) + 'px';
+  const key = String(node.id);
+  const expanded = _wecomOrgExpanded.has(key);
+  const hasChildren = !!(node.children && node.children.length);
+  const caret = document.createElement('span');
+  caret.className = 'org-caret';
+  caret.textContent = hasChildren ? (expanded ? '▾' : '▸') : '';
+  row.appendChild(caret);
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.checked = orgDeptChecked(node);
+  cb.indeterminate = orgDeptIndeterminate(node);
+  cb.onchange = () => {
+    orgToggleDept(node, cb.checked);
+    renderOrgTree();
+  };
+  row.appendChild(cb);
+  const name = document.createElement('span');
+  name.className = 'org-name';
+  name.textContent = node.name;
+  row.appendChild(name);
+  const count = document.createElement('span');
+  count.className = 'org-count';
+  count.textContent = orgAllUserids(node).length;
+  row.appendChild(count);
+  if (hasChildren) {
+    row.onclick = (ev) => {
+      if (ev.target !== cb) {
+        if (_wecomOrgExpanded.has(key)) _wecomOrgExpanded.delete(key); else _wecomOrgExpanded.add(key);
+        renderOrgTree();
+      }
+    };
+  }
+  return row;
+}
+
+function orgNodeFragment(node, depth) {
+  const frag = document.createDocumentFragment();
+  frag.appendChild(orgDeptRow(node, depth));
+  const key = String(node.id);
+  if (_wecomOrgExpanded.has(key)) {
+    (node.children || []).forEach((c) => frag.appendChild(orgNodeFragment(c, depth + 1)));
+    (node.users || []).forEach((u) => frag.appendChild(orgUserRow(u, depth + 1)));
+  }
+  return frag;
+}
+
+function renderOrgTree() {
+  const box = $('wecomOrgTree');
+  box.innerHTML = '';
+  if (!_wecomOrg) {
+    box.innerHTML = `<div class="empty">${esc(t('wecomOrgLoading'))}</div>`;
+    return;
+  }
+  if (!_wecomOrg.tree || !_wecomOrg.tree.length) {
+    box.innerHTML = `<div class="empty">${esc(t('wecomOrgEmpty'))}</div>`;
+    return;
+  }
+  const virtualRoot = { id: 'root', name: t('allCompany'), children: _wecomOrg.tree, users: _wecomOrg.rootUsers || [] };
+  box.appendChild(orgNodeFragment(virtualRoot, 0));
+  const demo = isWecomDemo() && !(S.wecom && S.wecom.enabled);
+  $('wecomOrgHint').textContent = (demo ? `${t('wecomDemoBadge')} · ` : '') + `${t('wecomOrgHint')} · ${t('wecomOrgSelected')} ${_wecomOrgSel.size}`;
+}
+
+async function openWecomOrgPicker() {
+  try {
+    $('wecomOrgModal').classList.remove('hidden');
+    if (!_wecomOrg) {
+      if (isWecomDemo() && !(S.wecom && S.wecom.enabled)) {
+        _wecomOrg = { tree: WECOM_DEMO_TREE, users: [], rootId: 'demo' };
+      } else {
+        renderOrgTree();
+        const data = await api('/api/wecom/org');
+        _wecomOrg = data;
+      }
+    }
+    renderOrgTree();
+  } catch (e) {
+    $('wecomOrgModal').classList.add('hidden');
+    toast(e.message || t('wecomOrgLoadFailed'), 'error');
+  }
+}
+
+async function confirmWecomOrgSelection() {
+  const userids = Array.from(_wecomOrgSel);
+  if (!userids.length) { toast(t('wecomOrgNoSelection'), 'error'); return; }
+  if (isWecomDemo() && !(S.wecom && S.wecom.enabled)) {
+    const demoIds = userids.map((id) => 'demo:' + id);
+    S._selEmps = Array.from(new Set([...(S._selEmps || []), ...demoIds]));
+    $('wecomOrgModal').classList.add('hidden');
+    _wecomOrgSel.clear();
+    renderEmployeeChips();
+    checkConflicts();
+    toast(`${t('wecomDemoBadge')}：${t('wecomOrgSelected')} ${userids.length}`);
+    return;
+  }
+  try {
+    const r = await api('/api/wecom/ensure-users', { method: 'POST', body: { userids } });
+    const localIds = r.users.map((u) => u.userId);
+    S._selEmps = Array.from(new Set([...(S._selEmps || []), ...localIds]));
+    $('wecomOrgModal').classList.add('hidden');
+    _wecomOrg = null;
+    _wecomOrgSel.clear();
+    renderEmployeeChips();
+    checkConflicts();
+    await loadBootstrap();
+    toast(t('wecomOrgAdded').replace('{n}', String(localIds.length)));
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
 function openMeetingModal(id, presetDate) {
   if (!S.me) { toast(S.lang === 'zh' ? '请先选择身份登录' : 'Please log in first', 'error'); return; }
   const m = id ? S.meetings.find((x) => x.id === id) : null;
@@ -1190,6 +1415,7 @@ function openMeetingModal(id, presetDate) {
   $('mNote').value = m ? (m.note || '') : '';
   S._selEmps = m ? [...m.employeeIds] : (S.me ? [S.me.id] : []);
   $('mDelete').classList.toggle('hidden', !m);
+  $('wecomOrgBtn').classList.toggle('hidden', !(isAdmin() && (S.wecom && S.wecom.enabled || isWecomDemo())));
   renderEmployeeChips();
   checkConflicts();
   updateTzHint();
@@ -1199,6 +1425,7 @@ function openMeetingModal(id, presetDate) {
 
 async function saveMeeting(ev) {
   ev.preventDefault();
+  const demoIds = demoEmpIds();
   const body = {
     title: $('mTitle').value.trim(),
     country: $('mCountry').value.trim(),
@@ -1208,7 +1435,7 @@ async function saveMeeting(ev) {
     date: $('mDate').value,
     start: $('mStart').value,
     end: $('mEnd').value,
-    employeeIds: S._selEmps || [],
+    employeeIds: (S._selEmps || []).filter((id) => !isDemoEmpId(id)),
     note: $('mNote').value.trim(),
     repeat: $('mRepeat').checked ? 'weekly' : null,
     createdBy: S.me ? S.me.id : ''
@@ -1224,6 +1451,7 @@ async function saveMeeting(ev) {
     }
     $('meetingModal').classList.add('hidden');
     toast(t('saved'));
+    if (demoIds.length) toast(`${t('wecomDemoBadge')}：${demoIds.length} ${t('wecomOrgIgnoredOnSave')}`);
     await loadBootstrap();
   } catch (e) { toast(e.message, 'error'); }
 }
@@ -1555,6 +1783,8 @@ function bindEvents() {
   $('mEnd').onchange = () => { checkConflicts(); updateTzHint(); };
   $('selAllEmps').onclick = () => { S._selEmps = activeUsers().map((u) => u.id); renderEmployeeChips(); checkConflicts(); };
   $('selNoneEmps').onclick = () => { S._selEmps = []; renderEmployeeChips(); checkConflicts(); };
+  $('wecomOrgBtn').onclick = openWecomOrgPicker;
+  $('wecomOrgConfirm').onclick = confirmWecomOrgSelection;
   $('mDelete').onclick = async () => {
     const id = $('mId').value;
     if (!id || !confirm(t('confirmDelete'))) return;

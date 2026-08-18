@@ -183,6 +183,24 @@ test('成员管理：权限、企微 ID 去重、删除清理', async () => {
   assert.equal(removed.status, 200);
 });
 
+test('企业微信组织架构接口：登录与管理员权限校验', async () => {
+  const anon = await api('GET', '/api/wecom/org');
+  assert.equal(anon.status, 401);
+  assert.equal(anon.json.error, 'login required');
+
+  const admin = await loginAs('管理员');
+  const notConfigured = await api('GET', '/api/wecom/org', { cookie: admin });
+  assert.equal(notConfigured.status, 400);
+  assert.equal(notConfigured.json.error, 'wecom not configured');
+
+  const create = await api('POST', '/api/users', { body: { name: '李四', wecomUserId: 'LiSi' }, cookie: admin });
+  assert.equal(create.status, 200);
+  const member = await loginAs('李四');
+  const forbidden = await api('POST', '/api/wecom/ensure-users', { body: { userids: ['LiSi'] }, cookie: member });
+  assert.equal(forbidden.status, 403);
+  assert.equal(forbidden.json.error, 'permission denied');
+});
+
 test('会议 CRUD、状态流转、单场取消、RSVP 与字典学习', async () => {
   const admin = await loginAs('管理员');
 

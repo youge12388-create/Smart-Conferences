@@ -415,6 +415,36 @@ textarea.input { resize: vertical; min-height: 52px; }
 }
 .person-chip:hover { border-color: var(--primary); }
 .person-chip.sel { background: var(--primary); border-color: var(--primary); color: #fff; }
+.person-chip.demo { border-style: dashed; border-color: var(--amber); background: var(--amber-soft); color: var(--amber); }
+
+/* ---------------- 企业微信组织架构选择器 ---------------- */
+.org-tree {
+  max-height: 55vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.org-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+.org-row:hover { background: var(--primary-soft); }
+.org-row input[type="checkbox"] {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+}
+.org-caret { width: 12px; flex: none; color: var(--ink-3); font-size: 12px; }
+.org-dept { font-weight: 600; }
+.org-user { font-weight: 400; }
+.org-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.org-count { flex: none; color: var(--ink-3); font-size: 12px; }
+.org-row .tag { flex: none; }
 .conflict {
   background: var(--danger-soft); border: 1px solid #E7B4A8; color: var(--danger);
   border-radius: 8px; padding: 9px 12px; font-size: 13px; margin-top: 2px;

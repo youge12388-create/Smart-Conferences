@@ -369,6 +369,7 @@
           <div class="field-head">
             <span data-i18n="employees">参会员工</span>
             <div class="emp-actions">
+              <button id="wecomOrgBtn" type="button" class="btn-link hidden" data-i18n="wecomOrgPick">从企业微信组织架构选择</button>
               <button id="selAllEmps" type="button" class="btn-link" data-i18n="selectAll">全选</button>
               <button id="selNoneEmps" type="button" class="btn-link" data-i18n="selectNone">清空</button>
             </div>
@@ -390,6 +391,23 @@
         <button type="submit" class="btn btn-primary" data-i18n="save">保存</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- 企业微信组织架构选择弹窗 -->
+<div id="wecomOrgModal" class="overlay hidden">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 data-i18n="wecomOrgTitle">选择企业微信通知对象</h3>
+      <button class="icon-btn" data-close="wecomOrgModal">✕</button>
+    </div>
+    <p id="wecomOrgHint" class="tz-hint"></p>
+    <div id="wecomOrgTree" class="org-tree"></div>
+    <div class="modal-foot">
+      <div class="grow"></div>
+      <button type="button" class="btn btn-ghost" data-close="wecomOrgModal" data-i18n="cancel">取消</button>
+      <button type="button" id="wecomOrgConfirm" class="btn btn-primary" data-i18n="wecomOrgConfirm">加入会议</button>
+    </div>
   </div>
 </div>
 
