@@ -137,9 +137,28 @@ const I18N = {
     statShare: '场次占比',
     statHoursShare: '时长占比',
     selectCountry: '选择市场（可选）',
+    meetingTitlePlaceholder: '如：南亚市场周例会',
+    meetingTypePlaceholder: '如：周例会',
+    channelPlaceholder: '如：Zoom / 微信 / 电话',
     selectAll: '全选',
     selectNone: '清空',
     otherMarkets: '其他市场',
+    dataLabels: {
+      market: {
+        '南亚': '南亚', '中亚': '中亚', '尼日利亚': '尼日利亚', '巴基斯坦': '巴基斯坦',
+        '孟加拉': '孟加拉', '东南亚': '东南亚', '中东': '中东', '其他': '其他',
+        '印度': '印度', '孟加拉国': '孟加拉国', '尼泊尔': '尼泊尔', '不丹': '不丹',
+        '斯里兰卡': '斯里兰卡', '马尔代夫': '马尔代夫', '哈萨克斯坦': '哈萨克斯坦',
+        '吉尔吉斯斯坦': '吉尔吉斯斯坦', '塔吉克斯坦': '塔吉克斯坦', '乌兹别克斯坦': '乌兹别克斯坦',
+        '土库曼斯坦': '土库曼斯坦', '越南': '越南', '老挝': '老挝', '柬埔寨': '柬埔寨',
+        '泰国': '泰国', '缅甸': '缅甸', '马来西亚': '马来西亚', '新加坡': '新加坡',
+        '印度尼西亚': '印度尼西亚', '文莱': '文莱', '菲律宾': '菲律宾', '东帝汶': '东帝汶'
+      },
+      type: {
+        '周例会': '周例会', '项目培训': '项目培训', 'Introductory Meeting': 'Introductory Meeting',
+        '客户会议': '客户会议', '内部会议': '内部会议', '其他': '其他'
+      }
+    },
     statTotal: '合计',
     statPerPerson: '个人数据',
     statRangeAll: '全部时间',
@@ -390,9 +409,28 @@ const I18N = {
     statShare: 'Share',
     statHoursShare: 'Hours share',
     selectCountry: 'Select market (optional)',
+    meetingTitlePlaceholder: 'e.g. South Asia Weekly Meeting',
+    meetingTypePlaceholder: 'e.g. Weekly Meeting / Introductory Meeting',
+    channelPlaceholder: 'e.g. Zoom / WeChat / Phone',
     selectAll: 'Select All',
     selectNone: 'Clear',
     otherMarkets: 'Other markets',
+    dataLabels: {
+      market: {
+        '南亚': 'South Asia', '中亚': 'Central Asia', '尼日利亚': 'Nigeria', '巴基斯坦': 'Pakistan',
+        '孟加拉': 'Bangladesh', '东南亚': 'Southeast Asia', '中东': 'Middle East', '其他': 'Other',
+        '印度': 'India', '孟加拉国': 'Bangladesh', '尼泊尔': 'Nepal', '不丹': 'Bhutan',
+        '斯里兰卡': 'Sri Lanka', '马尔代夫': 'Maldives', '哈萨克斯坦': 'Kazakhstan',
+        '吉尔吉斯斯坦': 'Kyrgyzstan', '塔吉克斯坦': 'Tajikistan', '乌兹别克斯坦': 'Uzbekistan',
+        '土库曼斯坦': 'Turkmenistan', '越南': 'Vietnam', '老挝': 'Laos', '柬埔寨': 'Cambodia',
+        '泰国': 'Thailand', '缅甸': 'Myanmar', '马来西亚': 'Malaysia', '新加坡': 'Singapore',
+        '印度尼西亚': 'Indonesia', '文莱': 'Brunei', '菲律宾': 'Philippines', '东帝汶': 'Timor-Leste'
+      },
+      type: {
+        '周例会': 'Weekly Meeting', '项目培训': 'Project Training', 'Introductory Meeting': 'Introductory Meeting',
+        '客户会议': 'Client Meeting', '内部会议': 'Internal Meeting', '其他': 'Other'
+      }
+    },
     statTotal: 'Total',
     statPerPerson: 'Per Member',
     statRangeAll: 'All time',

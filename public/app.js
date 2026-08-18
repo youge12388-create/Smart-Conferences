@@ -41,6 +41,22 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&':
 /* ---------------- i18n ---------------- */
 function t(key) { return (I18N[S.lang] && I18N[S.lang][key]) || I18N.zh[key] || key; }
 
+function dataLabel(kind, value) {
+  const labels = (I18N[S.lang] && I18N[S.lang].dataLabels && I18N[S.lang].dataLabels[kind]) || {};
+  return Object.prototype.hasOwnProperty.call(labels, value) ? labels[value] : value;
+}
+
+function dataValue(kind, label) {
+  const labels = (I18N[S.lang] && I18N[S.lang].dataLabels && I18N[S.lang].dataLabels[kind]) || {};
+  const hit = Object.entries(labels).find(([, display]) => display === label);
+  return hit ? hit[0] : label;
+}
+
+function displayDataLabel(value) {
+  const marketLabel = dataLabel('market', value);
+  return marketLabel !== value ? marketLabel : dataLabel('type', value);
+}
+
 function applyLang() {
   document.documentElement.lang = S.lang === 'zh' ? 'zh-CN' : 'en';
   document.title = t('appName') + ' · MeetingBoard';
@@ -182,10 +198,10 @@ function fillCountryOptions(sel, values, placeholder) {
   const grouped = new Set(COUNTRY_GROUPS.flatMap((g) => g.countries));
   COUNTRY_GROUPS.forEach((g) => {
     const og = document.createElement('optgroup');
-    og.label = g.region;
+    og.label = dataLabel('market', g.region);
     g.countries.forEach((c) => {
       const o = document.createElement('option');
-      o.value = c; o.textContent = c;
+      o.value = c; o.textContent = dataLabel('market', c);
       og.appendChild(o);
     });
     sel.appendChild(og);
@@ -196,7 +212,7 @@ function fillCountryOptions(sel, values, placeholder) {
     og.label = t('otherMarkets');
     extra.forEach((v) => {
       const o = document.createElement('option');
-      o.value = v; o.textContent = v;
+      o.value = v; o.textContent = dataLabel('market', v);
       og.appendChild(o);
     });
     sel.appendChild(og);
@@ -530,21 +546,21 @@ function filteredMeetings() {
 
 function renderList() {
   const f = S.listFilters;
-  const setOpts = (sel, list, selected, placeholder) => {
+  const setOpts = (sel, list, selected, placeholder, kind) => {
     sel.innerHTML = '';
     const o0 = document.createElement('option');
     o0.value = ''; o0.textContent = placeholder;
     sel.appendChild(o0);
     list.forEach((v) => {
       const o = document.createElement('option');
-      o.value = v; o.textContent = v;
+      o.value = v; o.textContent = kind ? dataLabel(kind, v) : v;
       sel.appendChild(o);
     });
     sel.value = selected;
   };
   fillCountryOptions($('fCountry'), S.dicts.countries, t('filterCountry'));
   $('fCountry').value = f.country || '';
-  setOpts($('fType'), S.dicts.types, f.type, t('filterType'));
+  setOpts($('fType'), S.dicts.types, f.type, t('filterType'), 'type');
   const stSel = $('fStatus');
   stSel.innerHTML = '';
   [
@@ -582,8 +598,8 @@ function renderList() {
     const tds = [
       `<td data-label="${t('date')}" class="nowrap">${fmtDate(m.date)}<div class="cell-sub">${fmtTimeRange(m)}${m.repeat === 'weekly' ? ' · ' + t('repeatBadge') : ''}</div></td>`,
       `<td data-label="${t('meetingTitle')}" class="meeting-title"><b>${esc(m.title)}</b> <span class="tag tag-status st-${st}">${t('st_' + st)}</span>${m.note ? `<div class="cell-sub">${esc(m.note)}</div>` : ''}</td>`,
-      `<td data-label="${t('country')}"><span class="tag tag-country" style="background:${countryColor(m.country)}">${esc(m.country || '-')}</span></td>`,
-      `<td data-label="${t('meetingType')}"><span class="tag tag-type">${esc(m.type || '-')}</span></td>`,
+      `<td data-label="${t('country')}"><span class="tag tag-country" style="background:${countryColor(m.country)}">${esc(dataLabel('market', m.country || '-'))}</span></td>`,
+      `<td data-label="${t('meetingType')}"><span class="tag tag-type">${esc(dataLabel('type', m.type || '-'))}</span></td>`,
       `<td data-label="${t('employees')}">${m.employeeIds.map((id) => userOf(id)).filter(Boolean).map((u) => `<span class="mini-avatar" title="${esc(myName(u))}">${esc(initials(myName(u)))}</span>`).join('') || '-'}</td>`,
       `<td data-label="${t('channel')}">${esc(m.channel || '-')}</td>`,
       `<td class="row-ops" data-label=""><button class="btn-link" data-view="${m.id}" data-i18n-view="view">${t('view')}</button>${m.repeat === 'weekly' && st !== 'cancelled' ? '<button class="btn-link danger-link" data-cancel-series="' + m.id + '">' + t('cancelSeries') + '</button>' : ''}</td>`
@@ -690,7 +706,8 @@ function renderBars(el, items, colorFn) {
     const pct = total ? Math.round((i.count / total) * 100) : 0;
     row.title = `${i.key} · ${i.count}${t('countUnit')} · ${fmtHours(i.minutes)}${t('hourUnit')} · ${pct}%`;
     const label = document.createElement('div');
-    label.className = 'bar-label'; label.textContent = i.key; label.title = i.key;
+    const displayKey = displayDataLabel(i.key);
+    label.className = 'bar-label'; label.textContent = displayKey; label.title = displayKey;
     const track = document.createElement('div');
     track.className = 'bar-track';
     const fill = document.createElement('div');
@@ -1096,7 +1113,11 @@ function renderFormLists() {
   fillCountryOptions($('mCountry'), S.dicts.countries, t('selectCountry'));
   const tl = $('typeList');
   tl.innerHTML = '';
-  S.dicts.types.forEach((v) => { const o = document.createElement('option'); o.value = v; tl.appendChild(o); });
+  S.dicts.types.forEach((v) => {
+    const o = document.createElement('option');
+    o.value = dataLabel('type', v);
+    tl.appendChild(o);
+  });
 }
 
 function renderEmployeeChips() {
@@ -1159,7 +1180,7 @@ function openMeetingModal(id, presetDate) {
   $('mId').value = m ? m.id : '';
   $('mTitle').value = m ? m.title : '';
   $('mCountry').value = m ? m.country : '';
-  $('mType').value = m ? m.type : '';
+  $('mType').value = m ? dataLabel('type', m.type) : '';
   $('mChannel').value = m ? (m.channel || '') : '';
   $('mMeetingUrl').value = m ? (m.meetingUrl || '') : '';
   $('mDate').value = m ? m.date : (presetDate || isoDate(new Date()));
@@ -1181,7 +1202,7 @@ async function saveMeeting(ev) {
   const body = {
     title: $('mTitle').value.trim(),
     country: $('mCountry').value.trim(),
-    type: $('mType').value.trim(),
+    type: dataValue('type', $('mType').value.trim()),
     channel: $('mChannel').value.trim(),
     meetingUrl: $('mMeetingUrl').value.trim(),
     date: $('mDate').value,
@@ -1221,8 +1242,8 @@ function openDetail(id, occurrenceDate) {
   $('detailBody').innerHTML = `
     <div class="detail-row"><span class="k">${t('meetingTitle')}</span><span class="v">${esc(m.title)} <span class="tag tag-status st-${st}">${t('st_' + st)}</span>${skipped ? ` <span class="tag tag-status st-cancelled">${t('occSkipped')}</span>` : ''}</span></div>
     <div class="detail-row"><span class="k">${t('date')}</span><span class="v">${fmtDate(occDate)} ${fmtTimeRangeFull(m, occDate)}${m.repeat === 'weekly' ? ' · ' + t('repeatBadge') : ''}</span></div>
-    <div class="detail-row"><span class="k">${t('country')}</span><span class="v"><span class="tag tag-country detail-country" style="background:${countryColor(m.country)}">${esc(m.country || '-')}</span></span></div>
-    <div class="detail-row"><span class="k">${t('meetingType')}</span><span class="v">${esc(m.type || '-')}</span></div>
+    <div class="detail-row"><span class="k">${t('country')}</span><span class="v"><span class="tag tag-country detail-country" style="background:${countryColor(m.country)}">${esc(dataLabel('market', m.country || '-'))}</span></span></div>
+    <div class="detail-row"><span class="k">${t('meetingType')}</span><span class="v">${esc(dataLabel('type', m.type || '-'))}</span></div>
     <div class="detail-row"><span class="k">${t('employees')}</span><span class="v">${esc(names) || '-'}</span></div>
     <div class="detail-row"><span class="k">${t('channel')}</span><span class="v">${esc(m.channel || '-')}</span></div>
     ${m.meetingUrl ? `<div class="detail-row"><span class="k">${t('meetingLink')}</span><span class="v"><a href="${esc(m.meetingUrl)}" target="_blank" rel="noopener noreferrer">${t('openMeeting')}</a></span></div>` : ''}
