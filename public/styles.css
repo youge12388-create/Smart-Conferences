@@ -416,6 +416,12 @@ textarea.input { resize: vertical; min-height: 52px; }
 .person-chip:hover { border-color: var(--primary); }
 .person-chip.sel { background: var(--primary); border-color: var(--primary); color: #fff; }
 .person-chip.demo { border-style: dashed; border-color: var(--amber); background: var(--amber-soft); color: var(--amber); }
+.person-chip.unknown { border-style: dashed; color: var(--ink-3); }
+.recent-participants { margin-top: 10px; }
+.recent-toggle { color: var(--ink-3); text-decoration: none; font-size: 13px; }
+.recent-toggle:hover { color: var(--primary); }
+.recent-box { margin-top: 6px; }
+.recent-box .chip-group { min-height: 0; }
 
 /* ---------------- 企业微信组织架构选择器 ---------------- */
 .org-tree {

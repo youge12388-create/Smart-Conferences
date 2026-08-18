@@ -1123,15 +1123,18 @@ function renderFormLists() {
 function renderEmployeeChips() {
   const box = $('mEmployees');
   box.innerHTML = '';
-  activeUsers().forEach((u) => {
+  (S._selEmps || []).forEach((uid) => {
+    if (isDemoEmpId(uid)) return;
+    const u = userOf(uid);
     const chip = document.createElement('button');
     chip.type = 'button';
-    chip.className = 'person-chip' + (S._selEmps && S._selEmps.includes(u.id) ? ' sel' : '');
-    chip.textContent = myName(u);
+    chip.className = 'person-chip sel' + (u ? '' : ' unknown');
+    chip.textContent = u ? myName(u) : t('unknownMember');
+    chip.title = u ? '' : String(uid);
     chip.onclick = () => {
       const set = S._selEmps;
-      const i = set.indexOf(u.id);
-      if (i >= 0) set.splice(i, 1); else set.push(u.id);
+      const i = set.indexOf(uid);
+      if (i >= 0) set.splice(i, 1);
       renderEmployeeChips();
       checkConflicts();
     };
@@ -1149,6 +1152,60 @@ function renderEmployeeChips() {
       const i = set.indexOf(id);
       if (i >= 0) set.splice(i, 1);
       renderEmployeeChips();
+      checkConflicts();
+    };
+    box.appendChild(chip);
+  });
+}
+
+function recentParticipants() {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 90);
+  const cutoffISO = isoDate(cutoff);
+  const lastByUser = new Map();
+  const recent = S.meetings
+    .filter((m) => m.status !== 'cancelled' && m.date >= cutoffISO)
+    .slice()
+    .sort((a, b) => {
+      const aDate = String(a.date || '');
+      const bDate = String(b.date || '');
+      return aDate === bDate ? String(a.start || '').localeCompare(String(b.start || '')) : aDate.localeCompare(bDate);
+    });
+  for (const m of recent) {
+    for (const id of (m.employeeIds || [])) lastByUser.set(id, m.date);
+  }
+  return activeUsers()
+    .filter((u) => lastByUser.has(u.id))
+    .sort((a, b) => {
+      const byDate = String(lastByUser.get(b.id) || '').localeCompare(String(lastByUser.get(a.id) || ''));
+      if (byDate !== 0) return byDate;
+      return String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hans-CN');
+    });
+}
+
+function renderRecentParticipants() {
+  const box = $('recentParticipantsChips');
+  const toggle = $('recentParticipantsToggle');
+  const isOpen = !$('recentParticipantsBox').classList.contains('hidden');
+  const all = recentParticipants();
+  const users = all.slice(0, 10);
+  toggle.textContent = `${t('recentParticipants')} (${all.length}) ${isOpen ? '▾' : '▸'}`;
+  box.innerHTML = '';
+  if (!users.length) {
+    box.innerHTML = `<div class="empty">${esc(t('recentParticipantsNone'))}</div>`;
+    return;
+  }
+  users.forEach((u) => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'person-chip' + (S._selEmps && S._selEmps.includes(u.id) ? ' sel' : '');
+    chip.textContent = myName(u);
+    chip.onclick = () => {
+      const set = S._selEmps;
+      const i = set.indexOf(u.id);
+      if (i >= 0) set.splice(i, 1); else set.push(u.id);
+      renderEmployeeChips();
+      renderRecentParticipants();
       checkConflicts();
     };
     box.appendChild(chip);
@@ -1290,9 +1347,11 @@ function orgDeptRow(node, depth) {
   const key = String(node.id);
   const expanded = _wecomOrgExpanded.has(key);
   const hasChildren = !!(node.children && node.children.length);
+  const hasMembers = !!(node.users && node.users.length);
+  const expandable = hasChildren || hasMembers;
   const caret = document.createElement('span');
   caret.className = 'org-caret';
-  caret.textContent = hasChildren ? (expanded ? '▾' : '▸') : '';
+  caret.textContent = expandable ? (expanded ? '▾' : '▸') : '';
   row.appendChild(caret);
   const cb = document.createElement('input');
   cb.type = 'checkbox';
@@ -1311,7 +1370,7 @@ function orgDeptRow(node, depth) {
   count.className = 'org-count';
   count.textContent = orgAllUserids(node).length;
   row.appendChild(count);
-  if (hasChildren) {
+  if (expandable) {
     row.onclick = (ev) => {
       if (ev.target !== cb) {
         if (_wecomOrgExpanded.has(key)) _wecomOrgExpanded.delete(key); else _wecomOrgExpanded.add(key);
@@ -1416,7 +1475,9 @@ function openMeetingModal(id, presetDate) {
   S._selEmps = m ? [...m.employeeIds] : (S.me ? [S.me.id] : []);
   $('mDelete').classList.toggle('hidden', !m);
   $('wecomOrgBtn').classList.toggle('hidden', !(isAdmin() && (S.wecom && S.wecom.enabled || isWecomDemo())));
+  $('recentParticipantsBox').classList.add('hidden');
   renderEmployeeChips();
+  renderRecentParticipants();
   checkConflicts();
   updateTzHint();
   $('meetingModal').classList.remove('hidden');
@@ -1781,10 +1842,13 @@ function bindEvents() {
   $('mDate').onchange = () => { checkConflicts(); updateTzHint(); };
   $('mStart').onchange = () => { checkConflicts(); updateTzHint(); };
   $('mEnd').onchange = () => { checkConflicts(); updateTzHint(); };
-  $('selAllEmps').onclick = () => { S._selEmps = activeUsers().map((u) => u.id); renderEmployeeChips(); checkConflicts(); };
   $('selNoneEmps').onclick = () => { S._selEmps = []; renderEmployeeChips(); checkConflicts(); };
   $('wecomOrgBtn').onclick = openWecomOrgPicker;
   $('wecomOrgConfirm').onclick = confirmWecomOrgSelection;
+  $('recentParticipantsToggle').onclick = () => {
+    $('recentParticipantsBox').classList.toggle('hidden');
+    renderRecentParticipants();
+  };
   $('mDelete').onclick = async () => {
     const id = $('mId').value;
     if (!id || !confirm(t('confirmDelete'))) return;

@@ -370,11 +370,16 @@
             <span data-i18n="employees">参会员工</span>
             <div class="emp-actions">
               <button id="wecomOrgBtn" type="button" class="btn-link hidden" data-i18n="wecomOrgPick">从企业微信组织架构选择</button>
-              <button id="selAllEmps" type="button" class="btn-link" data-i18n="selectAll">全选</button>
               <button id="selNoneEmps" type="button" class="btn-link" data-i18n="selectNone">清空</button>
             </div>
           </div>
           <div id="mEmployees" class="chip-group"></div>
+          <div class="recent-participants">
+            <button type="button" id="recentParticipantsToggle" class="btn-link recent-toggle"></button>
+            <div id="recentParticipantsBox" class="recent-box hidden">
+              <div id="recentParticipantsChips" class="chip-group"></div>
+            </div>
+          </div>
         </div>
       </div>
       <div class="form-row">
