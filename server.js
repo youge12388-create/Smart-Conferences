@@ -737,6 +737,92 @@ async function handleApi(req, res, url) {
     }
   }
 
+  // 组织架构读取：会议表单里的企业微信成员选择器使用
+  if (parts[1] === 'wecom' && parts.length === 3 && parts[2] === 'org' && method === 'GET') {
+    const authRes = requireUser(req, 'admin');
+    if (authRes.error) return send(res, authRes.error === 'permission denied' ? 403 : 401, { error: authRes.error });
+    if (!wecom.isConfigured()) return send(res, 400, { error: 'wecom not configured' });
+    const org = await wecom.getOrgTree();
+    const boundByUserid = new Map();
+    for (const u of store.users) {
+      const wid = users.normalizeWecomUserId(u.wecomUserId);
+      if (wid) boundByUserid.set(wid, u);
+    }
+    return send(res, 200, {
+      tree: org.tree,
+      rootId: org.rootId,
+      rootUsers: org.rootUsers,
+      users: org.users.map((item) => {
+        const bound = boundByUserid.get(item.userid);
+        return {
+          userid: item.userid,
+          name: item.name,
+          departmentIds: item.departmentIds,
+          bound: !!bound,
+          boundUserId: bound ? bound.id : ''
+        };
+      })
+    });
+  }
+
+  // 把勾选的企业微信成员转成会议本地成员：未绑定的一并自动建号
+  if (parts[1] === 'wecom' && parts.length === 3 && parts[2] === 'ensure-users' && method === 'POST') {
+    const authRes = requireUser(req, 'admin');
+    if (authRes.error) return send(res, authRes.error === 'permission denied' ? 403 : 401, { error: authRes.error });
+    if (!wecom.isConfigured()) return send(res, 400, { error: 'wecom not configured' });
+    const body = await readBody(req);
+    const userids = Array.isArray(body.userids)
+      ? body.userids.map((v) => users.normalizeWecomUserId(v)).filter(Boolean)
+      : [];
+    if (!userids.length || userids.length > 1000) return send(res, 400, { error: 'invalid userids' });
+    const unique = [...new Set(userids)];
+    const org = await wecom.getOrgTree();
+    const orgByName = new Map(org.users.map((u) => [u.userid, u]));
+    const unknown = unique.filter((userid) => !orgByName.has(userid));
+    if (unknown.length) {
+      return send(res, 400, { error: 'userids outside visible org', unknown: unknown.slice(0, 20) });
+    }
+    const result = [];
+    let createdCount = 0;
+    let backupName = '';
+    for (const userid of unique) {
+      const existing = store.users.find((u) => users.normalizeWecomUserId(u.wecomUserId) === userid);
+      if (existing) {
+        result.push({ userid, userId: existing.id, created: false });
+        continue;
+      }
+      if (!backupName) {
+        try {
+          backupName = createBackup('wecom-ensure-users');
+        } catch (e) {
+          return send(res, 500, { error: 'could not create backup before adding members' });
+        }
+      }
+      const info = orgByName.get(userid);
+      const user = {
+        id: uid('u'),
+        name: (info && info.name) || userid,
+        nameEn: '',
+        wecomUserId: userid,
+        email: '',
+        role: 'member',
+        active: true,
+        offDays: [],
+        passwordHash: auth.hashPassword(defaultPassword()),
+        createdAt: Date.now()
+      };
+      store.users.push(user);
+      recordAudit(authRes.user, 'user.create', user.id, user.name);
+      result.push({ userid, userId: user.id, created: true });
+      createdCount++;
+    }
+    if (createdCount) {
+      scheduleSave();
+      broadcast('changed', {});
+    }
+    return send(res, 200, { users: result, createdCount, backupName });
+  }
+
   // 成员管理
   if (parts[1] === 'users') {
     if (method === 'POST' && parts.length === 2) {

@@ -146,6 +146,80 @@ test('sendTextMessage 空列表跳过、缺 agentId 报错、成功与失败', a
   await assert.rejects(() => wecom.sendTextMessage(['u1'], 'x'), /wecom send failed/);
 });
 
+test('getOrgTree 构建部门树、去重成员并缓存 60 秒', async () => {
+  wecom.clearOrgCache();
+  wecom.setConfig({ corpId: 'c', agentId: '1000002', secret: 's', publicBase: 'https://x.com' });
+  getResponses.push({ access_token: 'tok', expires_in: 7200, errcode: 0 });
+  getResponses.push({
+    errcode: 0,
+    department: [
+      { id: 1, parentid: 0, name: '全公司', order: 1 },
+      { id: 2, parentid: 1, name: '市场部', order: 1 },
+      { id: 3, parentid: 1, name: '研发部', order: 2 },
+      { id: 4, parentid: 2, name: '策划组', order: 1 }
+    ]
+  });
+  getResponses.push({ errcode: 0, userlist: [] }); // 根部门直属成员
+  getResponses.push({ errcode: 0, userlist: [{ userid: 'u1', name: '张三' }, { userid: 'u2', name: '李四' }] });
+  getResponses.push({ errcode: 0, userlist: [{ userid: 'u4', name: '王五' }] });
+  getResponses.push({ errcode: 0, userlist: [{ userid: 'u3', name: '赵六' }] });
+
+  const org = await wecom.getOrgTree();
+  assert.equal(org.tree.length, 2);
+  assert.equal(org.tree[0].id, 2);
+  assert.equal(org.tree[0].users.length, 2);
+  assert.equal(org.tree[0].children[0].id, 4);
+  assert.deepEqual(org.rootUsers, []);
+  assert.equal(org.users.length, 4);
+  assert.deepEqual(org.users.map((u) => u.userid).sort(), ['u1', 'u2', 'u3', 'u4']);
+  const firstCalls = getCalls.length;
+
+  // 命中缓存：不再请求部门/成员接口
+  const cached = await wecom.getOrgTree();
+  assert.equal(cached.users.length, 4);
+  assert.equal(getCalls.length, firstCalls);
+
+  // 清缓存后重新拉取
+  wecom.clearOrgCache();
+  getResponses.push({ errcode: 0, department: [{ id: 1, parentid: 0, name: '全公司' }] });
+  getResponses.push({ errcode: 0, userlist: [] });
+  await wecom.getOrgTree();
+  assert.ok(getCalls.length > firstCalls);
+  wecom.clearOrgCache();
+});
+
+test('getOrgTree 可见范围不含根部门时保留顶层部门直属成员', async () => {
+  wecom.clearOrgCache();
+  wecom.setConfig({ corpId: 'c', agentId: '1000002', secret: 's', publicBase: 'https://x.com' });
+  getResponses.push({ access_token: 'tok', expires_in: 7200, errcode: 0 });
+  getResponses.push({
+    errcode: 0,
+    department: [
+      { id: 2, parentid: 1, name: '市场部', order: 1 },
+      { id: 4, parentid: 2, name: '策划组', order: 1 }
+    ]
+  });
+  getResponses.push({ errcode: 0, userlist: [{ userid: 'u1', name: '张三' }] });
+  getResponses.push({ errcode: 0, userlist: [{ userid: 'u4', name: '王五' }] });
+
+  const org = await wecom.getOrgTree();
+  assert.equal(org.rootId, 2);
+  assert.deepEqual(org.rootUsers.map((u) => u.userid), ['u1']);
+  assert.equal(org.tree.length, 1);
+  assert.equal(org.tree[0].id, 4);
+  assert.deepEqual(org.users.map((u) => u.userid).sort(), ['u1', 'u4']);
+  wecom.clearOrgCache();
+});
+
+test('getOrgTree 部门接口失败时抛错', async () => {
+  wecom.clearOrgCache();
+  wecom.setConfig({ corpId: 'c', agentId: '1000002', secret: 's', publicBase: 'https://x.com' });
+  getResponses.push({ access_token: 'tok', expires_in: 7200, errcode: 0 });
+  getResponses.push({ errcode: 60011, errmsg: 'no privilege' });
+  await assert.rejects(() => wecom.getOrgTree(), /wecom department list failed: 60011/);
+  wecom.clearOrgCache();
+});
+
 test('buildQrAuthUrl uses the official QR endpoint and preserves the callback state', () => {
   wecom.setConfig({ corpId: 'wxcorp', agentId: '1000012', secret: 'secret', publicBase: 'https://meet.example.com' });
   const url = new URL(wecom.buildQrAuthUrl('csrf-state'));
