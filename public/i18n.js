@@ -154,7 +154,6 @@ const I18N = {
     meetingTitlePlaceholder: '如：南亚市场周例会',
     meetingTypePlaceholder: '如：周例会',
     channelPlaceholder: '如：Zoom / 微信 / 电话',
-    selectAll: '全选',
     selectNone: '清空',
     otherMarkets: '其他市场',
     dataLabels: {
@@ -440,7 +439,6 @@ const I18N = {
     meetingTitlePlaceholder: 'e.g. South Asia Weekly Meeting',
     meetingTypePlaceholder: 'e.g. Weekly Meeting / Introductory Meeting',
     channelPlaceholder: 'e.g. Zoom / WeChat / Phone',
-    selectAll: 'Select All',
     selectNone: 'Clear',
     otherMarkets: 'Other markets',
     dataLabels: {

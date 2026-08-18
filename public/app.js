@@ -1123,15 +1123,17 @@ function renderFormLists() {
 function renderEmployeeChips() {
   const box = $('mEmployees');
   box.innerHTML = '';
-  activeUsers().forEach((u) => {
+  (S._selEmps || []).forEach((uid) => {
+    const u = userOf(uid);
+    if (!u) return;
     const chip = document.createElement('button');
     chip.type = 'button';
-    chip.className = 'person-chip' + (S._selEmps && S._selEmps.includes(u.id) ? ' sel' : '');
+    chip.className = 'person-chip sel';
     chip.textContent = myName(u);
     chip.onclick = () => {
       const set = S._selEmps;
       const i = set.indexOf(u.id);
-      if (i >= 0) set.splice(i, 1); else set.push(u.id);
+      if (i >= 0) set.splice(i, 1);
       renderEmployeeChips();
       checkConflicts();
     };
@@ -1290,9 +1292,11 @@ function orgDeptRow(node, depth) {
   const key = String(node.id);
   const expanded = _wecomOrgExpanded.has(key);
   const hasChildren = !!(node.children && node.children.length);
+  const hasMembers = !!(node.users && node.users.length);
+  const expandable = hasChildren || hasMembers;
   const caret = document.createElement('span');
   caret.className = 'org-caret';
-  caret.textContent = hasChildren ? (expanded ? '▾' : '▸') : '';
+  caret.textContent = expandable ? (expanded ? '▾' : '▸') : '';
   row.appendChild(caret);
   const cb = document.createElement('input');
   cb.type = 'checkbox';
@@ -1311,7 +1315,7 @@ function orgDeptRow(node, depth) {
   count.className = 'org-count';
   count.textContent = orgAllUserids(node).length;
   row.appendChild(count);
-  if (hasChildren) {
+  if (expandable) {
     row.onclick = (ev) => {
       if (ev.target !== cb) {
         if (_wecomOrgExpanded.has(key)) _wecomOrgExpanded.delete(key); else _wecomOrgExpanded.add(key);
@@ -1781,7 +1785,6 @@ function bindEvents() {
   $('mDate').onchange = () => { checkConflicts(); updateTzHint(); };
   $('mStart').onchange = () => { checkConflicts(); updateTzHint(); };
   $('mEnd').onchange = () => { checkConflicts(); updateTzHint(); };
-  $('selAllEmps').onclick = () => { S._selEmps = activeUsers().map((u) => u.id); renderEmployeeChips(); checkConflicts(); };
   $('selNoneEmps').onclick = () => { S._selEmps = []; renderEmployeeChips(); checkConflicts(); };
   $('wecomOrgBtn').onclick = openWecomOrgPicker;
   $('wecomOrgConfirm').onclick = confirmWecomOrgSelection;
