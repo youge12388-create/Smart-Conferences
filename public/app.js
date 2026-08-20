@@ -1293,6 +1293,32 @@ function demoOrgTree() {
   ];
 }
 
+// 真实企微部门名→英文名映射：英文界面显示英文，未配置的部门保留企微原名
+const DEPT_EN_MAP = {
+  '品牌申请部': 'Brand Application',
+  '总裁办': 'CEO Office',
+  '人事行政部': 'HR & Administration',
+  '市场部': 'Marketing',
+  '国际市场部': 'International Marketing',
+  '法律合规部': 'Legal & Compliance',
+  '品牌产品部': 'Brand & Product',
+  '渠道资源部': 'Channel Resources',
+  '申请服务部': 'Application Services',
+  '客户发展部': 'Client Development',
+  '河南分公司': 'Henan Branch',
+  'CSCA事业部': 'CSCA Business Unit',
+  '短期项目事业部': 'Short-term Project Division',
+  '国际医疗部': 'International Medical',
+  '研发部': 'R&D',
+  '策划组': 'Planning',
+  '渠道组': 'Channels',
+  '后端组': 'Backend'
+};
+
+function orgDeptName(node) {
+  return S.lang === 'en' ? (DEPT_EN_MAP[node.name] || node.name) : node.name;
+}
+
 function isWecomDemo() {
   return new URLSearchParams(window.location.search).get('wecomDemo') === '1';
 }
@@ -1386,7 +1412,8 @@ function orgDeptRow(node, depth) {
   row.appendChild(cb);
   const name = document.createElement('span');
   name.className = 'org-name';
-  name.textContent = node.name;
+  name.textContent = orgDeptName(node);
+  name.title = node.name;
   row.appendChild(name);
   const count = document.createElement('span');
   count.className = 'org-count';
