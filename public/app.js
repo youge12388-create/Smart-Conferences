@@ -1271,6 +1271,28 @@ const WECOM_DEMO_TREE = [
   }
 ];
 
+function demoOrgTree() {
+  if (S.lang !== 'en') return WECOM_DEMO_TREE;
+  return [
+    {
+      id: 2, name: 'Marketing', order: 1, users: [
+        { userid: 'demo_mk1', name: 'Zhang San' },
+        { userid: 'demo_mk2', name: 'Li Si' }
+      ],
+      children: [
+        { id: 4, name: 'Planning', order: 1, users: [{ userid: 'demo_pl1', name: 'Wang Wu' }], children: [] },
+        { id: 5, name: 'Channels', order: 2, users: [{ userid: 'demo_qd1', name: 'Zhao Liu' }], children: [] }
+      ]
+    },
+    {
+      id: 3, name: 'R&D', order: 2, users: [{ userid: 'demo_rd1', name: 'Sun Qi' }],
+      children: [
+        { id: 6, name: 'Backend', order: 1, users: [{ userid: 'demo_hd1', name: 'Zhou Ba' }], children: [] }
+      ]
+    }
+  ];
+}
+
 function isWecomDemo() {
   return new URLSearchParams(window.location.search).get('wecomDemo') === '1';
 }
@@ -1283,7 +1305,7 @@ function orgDemoUser(userid) {
       if (hit) { found = hit; return; }
       walk(n.children || []);
     }
-  })(WECOM_DEMO_TREE);
+  })(demoOrgTree());
   return found;
 }
 
@@ -1414,7 +1436,7 @@ async function openWecomOrgPicker() {
     $('wecomOrgModal').classList.remove('hidden');
     if (!_wecomOrg) {
       if (isWecomDemo() && !(S.wecom && S.wecom.enabled)) {
-        _wecomOrg = { tree: WECOM_DEMO_TREE, users: [], rootId: 'demo' };
+        _wecomOrg = { tree: demoOrgTree(), users: [], rootId: 'demo' };
       } else {
         renderOrgTree();
         const data = await api('/api/wecom/org');
@@ -1438,7 +1460,7 @@ async function confirmWecomOrgSelection() {
     _wecomOrgSel.clear();
     renderEmployeeChips();
     checkConflicts();
-    toast(`${t('wecomDemoBadge')}：${t('wecomOrgSelected')} ${userids.length}`);
+    toast(`${t('wecomDemoBadge')}: ${t('wecomOrgSelected')} ${userids.length}`);
     return;
   }
   try {
@@ -1512,7 +1534,7 @@ async function saveMeeting(ev) {
     }
     $('meetingModal').classList.add('hidden');
     toast(t('saved'));
-    if (demoIds.length) toast(`${t('wecomDemoBadge')}：${demoIds.length} ${t('wecomOrgIgnoredOnSave')}`);
+    if (demoIds.length) toast(`${t('wecomDemoBadge')}: ${demoIds.length} ${t('wecomOrgIgnoredOnSave')}`);
     await loadBootstrap();
   } catch (e) { toast(e.message, 'error'); }
 }
